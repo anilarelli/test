@@ -595,6 +595,7 @@ direct access to url like /Admin
                                                       RCE PHP -  https://www.depthsecurity.com/blog/exploitation-xml-external-entity-xxe-injection/
 
                                                              https://academy.ranakhalil.com/p/web-security-academy-video-series
+                                                          synack blogs
 
                                                             run requirements.txt
 
@@ -795,6 +796,10 @@ direct access to url like /Admin
                                                                 systemctl restart apache2
                                                                 systemctl reload apache2
                                                                 udo lsof -nP -iTCP -sTCP:LISTEN
+                                                                visual block - ctrl +v
+                                                                shift+I = insert
+                                                                d = delete
+                                                                x = delete
 
 
 
