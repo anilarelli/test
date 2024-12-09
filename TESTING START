@@ -600,6 +600,7 @@ direct access to url like /Admin
                                                           https://blog.zsec.uk/blind-xxe-learning/
                                                           https://honoki.net/2018/12/12/from-blind-xxe-to-root-level-file-read-access/
                                                           https://bookgin.tw/2018/12/03/from-xxe-to-rce-pwn2win-ctf-2018-writeup/
+                                                          https://github.com/BuffaloWill/oxml_xxe
                                                             run requirements.txt
 
 
