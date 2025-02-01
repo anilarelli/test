@@ -1,6 +1,3 @@
-testing start
-
-
 
 
 
@@ -48,19 +45,16 @@ unvalidate redirect
 
 
 IDOR
-exposing API key
-excessive data exposure
-lack of rate limiting
+
 authorization bugs
-mass assignment
+
 secuirty misconfiguration - server headers                          ALLWAYS TRY TO ENCODE THE INPUT TO BYPASS VALIDATION
-injection
+
 bussiness logic vuln
 verbose errors
 directory traversal fuzzing
-test web vulns
-xss
-sqli
+
+
 command inj
 
 
