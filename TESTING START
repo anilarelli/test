@@ -313,7 +313,19 @@ direct access to url like /Admin
                                                                 Samesite = Lax
 
                                                                         Will allow cross site requests to include cookie only when following a link 
-                                                                        
+For example:
+
+1. Let's say a user is on site-a.com and clicks on a link to go to site-b.com. This is a cross-site request.
+   This is a top-level navigation and is a GET request, so Lax cookies are sent to site-b.com. 
+   However, Strict cookies are not sent because it is, after all, a cross-site request.         
+
+2. The user is on site-a.com and there is an iframe in which site-b.com is loaded. 
+   This is a cross-site request, but it's not a top-level navigation (the user is still on site-a.com, i.e. the URL bar doesn't change when the iframe is loaded).
+   Therefore neither Lax nor Strict cookies are sent to site-b.com.
+
+3. The user is on site-a.com which POSTs a form to site-b.com.
+   This is a cross-site request, but the method (POST) is unsafe.
+   It doesn't meet the criteria for Lax cookies going cross-site, so neither Lax nor Strict cookies are sent to site-b.com. 
 
 
                                                         
