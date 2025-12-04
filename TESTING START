@@ -956,6 +956,7 @@ Also test single parameter at a time with " to break the query because multiple 
 ")    #
 
 ")  1=1 # 
+1' or '1' ='1
 
 ")  or 1=1 # 
 
