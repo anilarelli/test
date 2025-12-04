@@ -1042,8 +1042,7 @@ error based sqli
 
 
 
-signup
-admin' --
+signup username as admin' -- while password reset it will update for admin 
 1234
 
 
