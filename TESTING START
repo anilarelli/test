@@ -114,6 +114,84 @@ direct access to url like /Admin
                                                      eval() function is a sink because it process the data passed to it as javascript document.body.innerHTML because it potentially allows attacker to inject HTMl and execute arbitary javascript    
 
 
+
+                                            Step 1: JavaScript reads user input
+
+                                                        User input can come from:
+                                                        
+                                                        URL (location)
+                                                        
+                                                        Hash (#)
+                                                        
+                                                        Cookies
+                                                        
+                                                        LocalStorage
+                                                        
+                                                        postMessage
+                                                        
+                                                        window.name
+
+
+                                                            ❌ Dangerous sinks:
+                                                            
+                                                            innerHTML
+                                                            
+                                                            outerHTML
+                                                            
+                                                            document.write()
+                                                            
+                                                            eval()
+                                                            
+                                                            setTimeout(string)
+                                                            
+                                                            setInterval(string)
+                                                            
+                                                            location =
+                                                            
+                                                            srcdoc
+                                                            
+                                                            ✅ Safe sinks:
+                                                            
+                                                            textContent
+                                                            
+                                                            innerText
+                                                            
+                                                            setAttribute (sometimes)
+
+
+                                                                What happens:
+                                                                
+                                                                Browser loads page
+                                                                
+                                                                JavaScript runs
+                                                                
+                                                                JavaScript grabs URL data
+                                                                
+                                                                JavaScript injects it into DOM
+                                                                
+                                                                Browser re-parses it as HTML
+                                                                
+                                                                JavaScript executes
+                                                                
+                                                                The server never sees it
+
+
+                                                        Vulnerable code
+
+                                                        var q = location.hash.substring(1);
+                                                        document.getElementById("output").innerHTML = q;
+
+
+                                                                      <div id="welcome"></div>
+                                                                      
+                                                                      <script>
+                                                                        var name = new URLSearchParams(window.location.search).get("name");
+                                                                        if (name) {
+                                                                          document.getElementById("welcome").innerHTML =
+                                                                            "Welcome " + name;
+                                                                        }
+                                                                      </script>
+
                                                      https://michaelhidalgo.medium.com/on-flask-semgrep-and-secure-coding-26290fcdd960     
 
 
