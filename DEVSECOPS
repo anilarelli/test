@@ -1,6 +1,5 @@
 
-#### logs in real time
-```
+### logs in real time
+
 tail -f /var/log/nginx/access.log
 
-```
