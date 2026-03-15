@@ -3,3 +3,17 @@
 
 tail -f /var/log/nginx/access.log
 
+
+### File permission
+
+4 = Read (r)
+2 = Write (w)
+1 = Execute (x)
+4 + 2 + 1 = 7 (Read, Write, Execute)
+
+
+### process management
+
+ps aux - Shows all running processes.
+
+kill -9 1023
