@@ -409,7 +409,7 @@ pipeline {
                 docker run --rm \
                   -v /var/run/docker.sock:/var/run/docker.sock \
                   -v $WORKSPACE:/work \
-                  aquasec/trivy:latest image \
+                  aquasec/trivy:0.69.3 image \
                   --format table \
                   --output /work/trivy-report.txt \
                   ${IMAGE_NAME}:${IMAGE_TAG}
@@ -447,6 +447,363 @@ Jenkins checks out your repo
 builds your Docker image
 runs Trivy against that image
 saves trivy-report.txt as a build artifact
+
+
+trivy report location - /var/lib/jenkins/workspace/devsecopslab
+
+
+## Fail the pipeline on important Trivy findings
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "my-app"
+        IMAGE_TAG = "jenkins-${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+            }
+        }
+
+        stage('Run Trivy Scan') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v $WORKSPACE:/work \
+                  aquasec/trivy:0.69.3 image \
+                  --severity HIGH,CRITICAL \
+                  --ignore-unfixed \
+                  --exit-code 1 \
+                  --format json \
+                  --output /work/trivy-report.json \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-report.json', fingerprint: true, allowEmptyArchive: true
+        }
+    }
+}
+
+
+
+
+Add zap+juiceshop to the pipeline
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "my-app"
+        IMAGE_TAG  = "jenkins-${BUILD_NUMBER}"
+        ZAP_NET    = "zapnet"
+        APP_NAME   = "juice-shop"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+            }
+        }
+
+        stage('Run Trivy Gate') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v $WORKSPACE:/work \
+                  aquasec/trivy:0.69.3 image \
+                  --severity HIGH,CRITICAL \
+                  --ignore-unfixed \
+                  --exit-code 1 \
+                  --format json \
+                  --output /work/trivy-report.json \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Start Juice Shop') {
+            steps {
+                sh '''
+                docker network inspect ${ZAP_NET} >/dev/null 2>&1 || docker network create ${ZAP_NET}
+                docker rm -f ${APP_NAME} >/dev/null 2>&1 || true
+                docker run -d --name ${APP_NAME} --network ${ZAP_NET} -p 4000:3000 bkimminich/juice-shop
+                sleep 20
+                curl -I http://localhost:4000
+                '''
+            }
+        }
+
+        stage('Run ZAP Baseline Scan') {
+            steps {
+                sh '''
+                mkdir -p zap-reports
+
+                docker run --rm -t \
+                  --network ${ZAP_NET} \
+                  -v $WORKSPACE/zap-reports:/zap/wrk/:rw \
+                  ghcr.io/zaproxy/zaproxy:stable \
+                  zap-baseline.py \
+                  -t http://${APP_NAME}:3000 \
+                  -J zap-report.json \
+                  -r zap-report.html
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true, fingerprint: true
+            archiveArtifacts artifacts: 'zap-reports/*', allowEmptyArchive: true, fingerprint: true
+            sh 'docker rm -f ${APP_NAME} >/dev/null 2>&1 || true'
+        }
+    }
+}
+
+
+
+
+
+
+CD Phase
+
+Real app for deployement - 
+```
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Hello DevSecOps 🚀"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
+
+```
+
+updated docker file
+
+```
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY app.py .
+
+RUN pip install flask
+
+CMD ["python", "app.py"]
+
+```
+
+
+
+Use this full Jenkinsfile for build + Trivy + Juice Shop + ZAP + deploy:
+
+
+```
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "my-app"
+        IMAGE_TAG  = "jenkins-${BUILD_NUMBER}"
+        ZAP_NET    = "zapnet"
+        APP_NAME   = "juice-shop"
+        DEPLOY_NAME = "my-app"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                '''
+            }
+        }
+
+        stage('Run Trivy Gate') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v $WORKSPACE:/work \
+                  aquasec/trivy:0.69.3 image \
+                  --severity HIGH,CRITICAL \
+                  --ignore-unfixed \
+                  --exit-code 1 \
+                  --format json \
+                  --output /work/trivy-report.json \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Start Juice Shop') {
+            steps {
+                sh '''
+                docker network inspect ${ZAP_NET} >/dev/null 2>&1 || docker network create ${ZAP_NET}
+                docker rm -f ${APP_NAME} >/dev/null 2>&1 || true
+                docker run -d --name ${APP_NAME} --network ${ZAP_NET} -p 4000:3000 bkimminich/juice-shop
+                sleep 20
+                curl -I http://localhost:4000
+                '''
+            }
+        }
+
+        stage('Run ZAP Baseline Scan') {
+            steps {
+                sh '''
+                mkdir -p zap-reports
+                set +e
+
+                docker run --rm -t \
+                  --network ${ZAP_NET} \
+                  -v $WORKSPACE/zap-reports:/zap/wrk/:rw \
+                  ghcr.io/zaproxy/zaproxy:stable \
+                  zap-baseline.py \
+                  -t http://${APP_NAME}:3000 \
+                  -J zap-report.json \
+                  -r zap-report.html
+
+                ZAP_EXIT=$?
+                echo "ZAP exit code: $ZAP_EXIT"
+
+                if [ "$ZAP_EXIT" -eq 3 ]; then
+                  exit 3
+                fi
+
+                exit 0
+                '''
+            }
+        }
+
+        stage('Deploy App') {
+            steps {
+                sh '''
+                docker rm -f ${DEPLOY_NAME} >/dev/null 2>&1 || true
+                docker run -d \
+                  --name ${DEPLOY_NAME} \
+                  -p 5000:5000 \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true, fingerprint: true
+            archiveArtifacts artifacts: 'zap-reports/*', allowEmptyArchive: true, fingerprint: true
+
+            sh '''
+            docker rm -f ${APP_NAME} >/dev/null 2>&1 || true
+            '''
+        }
+    }
+}
+
+```
+
+
+Harden the Docker image
+
+
+```
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN useradd -m appuser
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]
+
+```
+
+requirements.txt - flask==3.0.3
+
+
+
+What each hardening step does
+
+PYTHONDONTWRITEBYTECODE=1
+
+Prevents .pyc bytecode files from being created.
+
+PYTHONUNBUFFERED=1
+
+Makes logs print immediately, which is useful in containers.
+
+useradd -m appuser
+
+Creates a non-root user.
+
+pip install --no-cache-dir
+
+Avoids storing pip cache, making the image smaller and cleaner.
+
+chown -R appuser:appuser /app
+
+Gives the non-root user ownership of app files.
+
+USER appuser
+
+This is the big security improvement.
+If the app is compromised, the attacker does not get root inside the container.
+
+EXPOSE 5000
+
+Documents the app port.
+
+
+
 
 
 
