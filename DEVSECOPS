@@ -12,8 +12,268 @@ tail -f /var/log/nginx/access.log
 4 + 2 + 1 = 7 (Read, Write, Execute)
 
 
+chmod 755 script.sh
+
+Owner   → read write execute
+Group   → read execute
+Others  → read execute
+
+4. Creating your own group
+If you want to create a new group for a specific project:
+Create the group: sudo groupadd project_alpha
+Add a user to it: sudo usermod -aG project_alpha username
+
+chmod 664 file: Owner/Group can read/write; Others can only read.
+
+If the group doesn't already own the file, use chgrp - sudo chgrp groupname filename
+
 ### process management
 
 ps aux - Shows all running processes.
 
 kill -9 1023
+
+
+### Kill a port
+
+sudo fuser -k 5000/tcp
+
+
+### live logs view
+
+tail -f /var/log/syslog
+
+
+
+### Git
+
+clone repo - git clone https://github.com/project/app.git
+
+Working Directory → Staging Area → Repository (below)
+
+Add files - git add . (“Okay, I see this file. Ready to save it.”)
+
+commit - git commit -m "added feature" (Commit = Save point in history)
+
+Git stores:
+
+what changed
+when
+who made change
+
+push - git push origin main (Uploads your code to GitHub.)
+
+
+Breakdown:
+Part	  Meaning
+push	  send code
+origin	your GitHub repo
+main	  branch name
+
+branching - git checkout -b feature-login
+
+
+##Configure Git (Important Step)
+
+Set your identity (used in commits):
+
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+
+git config --list
+
+Generate SSH key
+
+ssh-keygen -t ed25519 -C "your_email@example.com"
+
+This creates:
+
+~/.ssh/id_ed25519
+~/.ssh/id_ed25519.pub
+id_ed25519 = private key, never share
+id_ed25519.pub = public key, safe to add to GitHub
+
+
+Start the SSH agent
+
+eval "$(ssh-agent -s)" - This starts a background process that manages your key.
+
+Then add your private key:
+
+ssh-add ~/.ssh/id_ed25519
+
+If you set a passphrase, it will ask for it here.
+
+verify key loaded - ssh-add -l
+
+
+cat ~/.ssh/id_ed25519.pub - show the public key
+
+Add the public key to GitHub
+
+In GitHub:
+
+click your profile picture
+go to Settings
+open SSH and GPG keys
+click New SSH key
+title: something like Ubuntu DevSecOps Lab
+paste the key
+save
+
+Now GitHub knows your machine.
+
+ssh -T git@github.com - test connection
+
+
+
+## Change your Git remote from HTTPS to SSH
+
+git remote -v - check current
+
+git remote set-url origin git@github.com:USERNAME/devsecops-lab.git
+
+
+
+## Gitignore
+
+nano .gitignore
+
+
+.ssh/
+*.pem
+*.key
+.env
+
+then save and commit
+
+git add .gitignore
+git commit -m "add gitignore"
+git push
+
+
+
+
+### Docker
+
+install - sudo apt install docker.io -y
+
+start -
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo systemctl status docker
+
+test -
+docker run hello-world
+
+
+Aviod sudo everytime
+
+sudo usermod -aG docker $USER -  run docker as normal user 
+
+
+
+Pull an image - docker pull nginx
+
+see local images - docker images
+
+Run a container - docker run nginx
+
+see running containers - docker ps
+
+see all including stopped containers - docker ps -a
+
+stop a container - docker stop CONTAINER_ID
+
+remove container - docker rm CONTAINER_ID
+
+runs in background - docker run -d -p 8080:80 nginx
+
+What this means:
+
+-d = run in background
+-p 8080:80 = host port 8080 forwards to container port 80
+nginx = image name
+your VM port 8080  →  container port 80
+
+docker ps - you should see a running container http://localhost:8080
+
+
+see container logs - docker logs CONTAINER_ID
+
+
+## Create Dockerfile
+
+nano Dockerfile
+
+FROM python:3.9
+
+WORKDIR /app
+
+COPY app.py .
+
+CMD ["python", "app.py"]
+
+
+COPY app.py - 👉 Copy your local file into container
+
+CMD ["python", "app.py"] - 👉 What runs when container starts
+
+docker build -t my-app . - build docker image
+
+docker images
+
+
+
+
+
+
+
+
+
+
+
+docker run -d -p 3000:3000 bkimminich/juice-shop
+
+
+## container scanning - Trivy
+
+sudo apt install wget apt-transport-https gnupg -y
+
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+
+sudo apt install trivy -y
+
+## scan container image
+
+trivy image bkimminich/juice-shop
+
+
+
+## semgrep - SAST
+
+install pip install semgrep
+
+RUN scan - semgrep --config=auto .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
