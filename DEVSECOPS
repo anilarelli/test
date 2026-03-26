@@ -802,6 +802,204 @@ EXPOSE 5000
 
 Documents the app port.
 
+You can also check the running container user:
+
+docker exec -it my-app whoami
+
+
+Secrets Management
+
+
+
+app.py
+
+```
+from flask import Flask
+import os
+
+app = Flask(__name__)
+
+APP_MESSAGE = os.getenv("APP_MESSAGE", "Hello DevSecOps 🚀")
+SECRET_TOKEN = os.getenv("SECRET_TOKEN", "not-set")
+
+@app.route('/')
+def home():
+    return APP_MESSAGE
+
+@app.route('/health')
+def health():
+    return "OK"
+
+@app.route('/secret-check')
+def secret_check():
+    if SECRET_TOKEN == "not-set":
+        return "Secret missing", 500
+    return "Secret loaded", 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
+```
+
+
+
+Add Jenkins secret
+
+
+In Jenkins:
+
+Manage Jenkins
+Credentials
+choose the appropriate global domain
+Add Credentials
+kind: Secret text
+secret: put something like: super-secret-token-123
+ID - my-secret-token
+
+
+Update Jenkinsfile
+
+
+```
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME   = "my-app"
+        IMAGE_TAG    = "jenkins-${BUILD_NUMBER}"
+        ZAP_NET      = "zapnet"
+        APP_NAME     = "juice-shop"
+        DEPLOY_NAME  = "my-app"
+        APP_MESSAGE  = "Hello from Jenkins DevSecOps 🚀"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                '''
+            }
+        }
+
+        stage('Run Trivy Gate') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v $WORKSPACE:/work \
+                  aquasec/trivy:0.69.3 image \
+                  --severity HIGH,CRITICAL \
+                  --ignore-unfixed \
+                  --exit-code 1 \
+                  --format json \
+                  --output /work/trivy-report.json \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Start Juice Shop') {
+            steps {
+                sh '''
+                docker network inspect ${ZAP_NET} >/dev/null 2>&1 || docker network create ${ZAP_NET}
+                docker rm -f ${APP_NAME} >/dev/null 2>&1 || true
+                docker run -d --name ${APP_NAME} --network ${ZAP_NET} -p 4000:3000 bkimminich/juice-shop
+                sleep 20
+                curl -I http://localhost:4000
+                '''
+            }
+        }
+
+        stage('Run ZAP Baseline Scan') {
+            steps {
+                sh '''
+                mkdir -p zap-reports
+                set +e
+
+                docker run --rm -t \
+                  --network ${ZAP_NET} \
+                  -v $WORKSPACE/zap-reports:/zap/wrk/:rw \
+                  ghcr.io/zaproxy/zaproxy:stable \
+                  zap-baseline.py \
+                  -t http://${APP_NAME}:3000 \
+                  -J zap-report.json \
+                  -r zap-report.html
+
+                ZAP_EXIT=$?
+                echo "ZAP exit code: $ZAP_EXIT"
+
+                if [ "$ZAP_EXIT" -eq 3 ]; then
+                  exit 3
+                fi
+
+                exit 0
+                '''
+            }
+        }
+
+        stage('Deploy App') {
+            steps {
+                withCredentials([string(credentialsId: 'my-secret-token', variable: 'SECRET_TOKEN')]) {
+                    sh '''
+                    docker rm -f ${DEPLOY_NAME} >/dev/null 2>&1 || true
+                    docker run -d \
+                      --name ${DEPLOY_NAME} \
+                      -p 5000:5000 \
+                      -e APP_MESSAGE="${APP_MESSAGE}" \
+                      -e SECRET_TOKEN="${SECRET_TOKEN}" \
+                      ${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true, fingerprint: true
+            archiveArtifacts artifacts: 'zap-reports/*', allowEmptyArchive: true, fingerprint: true
+
+            sh '''
+            docker rm -f ${APP_NAME} >/dev/null 2>&1 || true
+            '''
+        }
+    }
+}
+
+```
+
+        
+That means:
+
+Jenkins fetches the stored secret
+puts it into env variable SECRET_TOKEN
+passes it into the container at runtime
+
+This is the correct pattern.
+
+http://localhost:5000/secret-check
+
+
+
+
+Docker Compose
+
+
+
+
+
+
+
+
+
+
 
 
 
