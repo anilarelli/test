@@ -223,16 +223,6 @@ docker build -t my-app . - build docker image
 
 docker images
 
-
-
-
-
-
-
-
-
-
-
 docker run -d -p 3000:3000 bkimminich/juice-shop
 
 
@@ -242,11 +232,27 @@ sudo apt install wget apt-transport-https gnupg -y
 
 wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
 
+add trivy repository - echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+
 sudo apt install trivy -y
+
+what trivy does 
+
+Docker images
+OS packages
+Libraries
+Misconfigurations
+Secrets
 
 ## scan container image
 
 trivy image bkimminich/juice-shop
+
+trivy image --severity HIGH,CRITICAL my-app
+
+
+trivy image --ignore-unfixed my-app
+
 
 
 
@@ -257,15 +263,190 @@ install pip install semgrep
 RUN scan - semgrep --config=auto .
 
 
+## ZAP
+
+mkdir -p ~/zap-reports
+cd ~/zap-reports
+
+baseline scan - docker run --rm -t \
+  -v "$(pwd)":/zap/wrk/:rw \
+  ghcr.io/zaproxy/zaproxy:stable \
+  zap-baseline.py -t http://host.docker.internal:4000 -r zap-report.html
+
+
+Full scan -
+docker run --rm -t \
+  -v "$(pwd)":/zap/wrk/:rw \
+  ghcr.io/zaproxy/zaproxy:stable \
+  zap-full-scan.py -t http://host.docker.internal:4000 -r zap-full-report.html
+
+
+
+
+when scanning from a Docker container, localhost/127.0.0.1 won’t reach an app on the host the way people often expect; they recommend either using a usable host IP or other Docker networking approaches.
+when the target is another Docker container, the recommended fix is to put both containers on the same Docker network.
+
+Since your Juice Shop is also in Docker, the clean fix is this:
+
+1. Create a shared Docker network
+
+docker network create zapnet
+
+Re-run Juice Shop on that network - 
+docker rm -f juice-shop 2>/dev/null
+docker run -d --name juice-shop --network zapnet -p 4000:3000 bkimminich/juice-shop
+
+
+docker run --rm -t \
+  --network zapnet \
+  -v "$(pwd)":/zap/wrk/:rw \
+  ghcr.io/zaproxy/zaproxy:stable \
+  zap-baseline.py -t http://juice-shop:3000 -r zap-report.html
+
+
+Then add the Jenkins repo and install Jenkins:
+
+sudo mkdir -p /etc/apt/keyrings
+sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+  https://pkg.jenkins.io/debian/jenkins.io-2026.key
+
+echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian binary/" | \
+  sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+
+sudo apt update
+sudo apt install -y jenkins
+
+sudo systemctl enable jenkins
+sudo systemctl start jenkins
+sudo systemctl status jenkins
+http://localhost:8080
+
+Get the initial admin password:
+
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+
+
+Install the plugins you need
+
+
+In Jenkins:
+
+Manage Jenkins → Plugins
+
+Install these:
+
+Pipeline
+Git
+Docker Pipeline
+Warnings Next Generation (optional, nice for reports)
+
+Let Jenkins use Docker
+
+Your Jenkins pipeline will need Docker access to:
+
+build images
+run Trivy
+later run ZAP
+
+Add the jenkins user to the Docker group
+
+sudo usermod -aG docker jenkins
+sudo systemctl restart jenkins
+
+groups jenkins - You should see docker in the list.
+
+Put your code in GitHub
+
+Your repo should contain at least:
+
+Dockerfile
+app files
+later: Jenkinsfile
+
+Create a Jenkins Pipeline job
+
+In Jenkins:
+
+New Item
+name: devsecops-lab
+choose Pipeline
+under Pipeline Definition, choose Pipeline script from SCM
+SCM: Git
+repo URL: your GitHub repo
+branch: */main
+script path: Jenkinsfile
+
+
+Add your first Jenkinsfile
+
+Create a file named Jenkinsfile in your repo:
+
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "my-app"
+        IMAGE_TAG = "jenkins-${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+            }
+        }
+
+        stage('Run Trivy Scan') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v $WORKSPACE:/work \
+                  aquasec/trivy:latest image \
+                  --format table \
+                  --output /work/trivy-report.txt \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Archive Trivy Report') {
+            steps {
+                archiveArtifacts artifacts: 'trivy-report.txt', fingerprint: true
+            }
+        }
+    }
+}
 
 
 
 
 
+git add Jenkinsfile
+git commit -m "add Jenkins pipeline with Trivy"
+git push origin main
 
 
+Run the job
 
+Back in Jenkins:
 
+open devsecops-lab
+click Build Now
+
+What should happen:
+
+Jenkins checks out your repo
+builds your Docker image
+runs Trivy against that image
+saves trivy-report.txt as a build artifact
 
 
 
