@@ -987,19 +987,95 @@ This is the correct pattern.
 http://localhost:5000/secret-check
 
 
+### Improve deployment structure
+
+Right now your CD stage deploys directly with: docker run
+
+Docker Compose - Run multiple containers together on ONE machine - app + database + redis
 
 
-Docker Compose
+The better next step is Docker Compose first, because it teaches:
+
+multi-container deployment
+environment variables
+service structure
+cleaner local deployment
+how real apps are composed before Kubernetes
+
+
+Docker Compose → learning tool (local)
+Kubernetes     → production orchestration (real world)
+
+
+☸️ Kubernetes
+
+Manage containers across MANY machines (cluster)
+
+Handles:
+
+scaling
+self-healing
+load balancing
+rolling updates
+secrets/configs
+
+Docker Compose = single apartment
+Kubernetes     = entire city
 
 
 
+Docker Compose Setup
 
 
+Update app.py (use Redis)
 
+```
+from flask import Flask
+import redis
+import os
 
+app = Flask(__name__)
 
+redis_host = os.getenv("REDIS_HOST", "localhost")
+r = redis.Redis(host=redis_host, port=6379)
 
+@app.route("/")
+def home():
+    count = r.incr("hits")
+    return f"Hello DevSecOps 🚀 - Visits: {count}"
 
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+```
+
+requirements.txt  -
+flask==3.0.3
+redis==5.0.1
+
+docker-compose.yml
+
+```
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: my-app
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7
+    container_name: my-redis
+
+```
+Run it - docker compose up --build (old - docker-compose up --build)
+
+stop - docker compose down
 
 
 
