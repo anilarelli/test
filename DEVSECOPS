@@ -1466,7 +1466,7 @@ Scaling → replicas
 Rolling updates → zero downtime
 
 
-ConfigMap (configuration management)
+1. ConfigMap (configuration management)
 
 Right now your app has hardcoded message.
 
@@ -1554,14 +1554,64 @@ you should see - Hello from Kubernetes ConfigMap 🚀
 
 
 
+2. Kubernetes Secret
+
+Now move sensitive data from Jenkins → Kubernetes.
+
+```
+Create secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-app-secret
+type: Opaque
+data:
+  SECRET_TOKEN: c3VwZXItc2VjcmV0
+```
+👉 That value is base64 of:
+
+super-secret
 
 
 
+kubectl apply -f secret.yaml
 
 
+add to deployement.yaml
+```
+env:
+  - name: APP_MESSAGE
+    valueFrom:
+      configMapKeyRef:
+        name: my-app-config
+        key: APP_MESSAGE
+  - name: SECRET_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: my-app-secret
+        key: SECRET_TOKEN
+```
+add to app.py
+```
+@app.route("/secret")
+def secret():
+    return os.getenv("SECRET_TOKEN", "no secret")
+```
 
 
+3. Scaling
+
+increase replecas kubectl scale deployment my-app --replicas=3
+
+kubectl get pods - You should see 3 pods.
 
 
+4. Rolling Update
+
+change image - kubectl set image deployment/my-app my-app=my-app:latest
+
+Check rollout:
+
+kubectl rollout status deployment my-app
 
 
