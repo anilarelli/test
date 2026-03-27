@@ -1323,24 +1323,234 @@ Then apply again.
 
 
 
+###integrate Jenkins with Kubernetes deployment
+
+For Jenkins, the easiest official-supported way to use kubectl in pipelines is the Kubernetes CLI plugin, which provides kubeconfig setup for pipeline steps. Jenkins pipeline credentials support secret text and secret files, which fits kubeconfig-based auth well
+
+Then add a Kubernetes credential, ideally a kubeconfig file credential for your Minikube cluster. The plugin is specifically meant to let pipeline jobs run kubectl against a cluster.
+
+Export your Minikube kubeconfig
+
+On your Ubuntu VM, your kubeconfig is usually here:
+
+~/.kube/config
+
+Use a real image reference
+
+Kubernetes generally expects an image it can access, which usually means pushing to a registry first, then referencing that image in your Deployment. Container images are typically built and pushed to a registry before being used in Pods.
+
+So your Deployment should eventually use something like:
+
+image: yourdockerhubusername/my-app:latest
 
 
 
 
+Use a real image reference
+
+Kubernetes generally expects an image it can access, which usually means pushing to a registry first, then referencing that image in your Deployment. Container images are typically built and pushed to a registry before being used in Pods.
+
+So your Deployment should eventually use something like:
+
+image: yourdockerhubusername/my-app:latest
+
+jenkins file
+
+```
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "yourdockerhubusername/my-app"
+        IMAGE_TAG  = "jenkins-${BUILD_NUMBER}"
+        ZAP_NET    = "zapnet"
+        APP_NAME   = "juice-shop"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                '''
+            }
+        }
+
+        stage('Run Trivy Gate') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v $WORKSPACE:/work \
+                  aquasec/trivy:0.69.3 image \
+                  --severity HIGH,CRITICAL \
+                  --ignore-unfixed \
+                  --exit-code 1 \
+                  --format json \
+                  --output /work/trivy-report.json \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withKubeConfig([credentialsId: 'minikube-kubeconfig']) {
+                    sh '''
+                    kubectl get nodes
+                    kubectl set image deployment/my-app my-app=${IMAGE_NAME}:${IMAGE_TAG}
+                    kubectl rollout status deployment/my-app
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true, fingerprint: true
+        }
+    }
+}
+```
+
+This uses Jenkins credentials for Docker Hub login and withKubeConfig(...) for Kubernetes auth, which is exactly what the Kubernetes CLI plugin is for. The deployment update uses the official kubectl set image flow and waits for rollout completion.
+
+What you must prepare before running that pipeline
+
+Your Kubernetes Deployment must already exist once, with container name my-app. After that, Jenkins can keep updating just the image with kubectl set image. Deployments are the Kubernetes object meant to manage Pods and rollout updates.
+
+Your next actions
+
+Create these Jenkins credentials:
+
+dockerhub-creds → username/password for Docker Hub
+minikube-kubeconfig → secret file containing ~/.kube/config
+
+Then update your image name in the Jenkinsfile to your Docker Hub repo name, push the Jenkinsfile, and run the build.
+
+After that, the pipeline becomes:
+
+GitHub → Jenkins → Build → Trivy → Push image → kubectl deploy
+
+That is your first real Jenkins-to-Kubernetes CD flow.
 
 
 
 
+###Kubernetes Deep Dive
 
 
+What you will learn NOW
+ConfigMap → configuration
+Secret → sensitive data
+Scaling → replicas
+Rolling updates → zero downtime
 
 
+ConfigMap (configuration management)
+
+Right now your app has hardcoded message.
+
+We will move it to Kubernetes.
+
+configmap.yaml
+
+```
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-app-config
+data:
+  APP_MESSAGE: "Hello from Kubernetes ConfigMap 🚀"
+
+```
+
+kubectl apply -f configmap.yaml
 
 
+app.py
+
+```
+import os
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return os.getenv("APP_MESSAGE", "default message")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+```
 
 
+deployement.yaml
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: my-app:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
+          env:
+            - name: APP_MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: my-app-config
+                  key: APP_MESSAGE
+            - name: SECRET_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-app-secret
+                  key: SECRET_TOKEN
+
+```
 
 
+eval $(minikube docker-env)
+docker build -t my-app:latest .
+kubectl apply -f deployment.yaml
+
+
+minikube service my-app-service
+
+you should see - Hello from Kubernetes ConfigMap 🚀
 
 
 
