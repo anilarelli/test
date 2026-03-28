@@ -1613,5 +1613,5 @@ change image - kubectl set image deployment/my-app my-app=my-app:latest
 Check rollout:
 
 kubectl rollout status deployment my-app
-
+.
 
