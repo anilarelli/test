@@ -1651,3 +1651,162 @@ Check rollout:
 kubectl rollout status deployment my-app
 .
 
+
+
+Now we do the next real step:
+
+Jenkins → Kubernetes deployment
+
+This is where your pipeline becomes a true CI/CD pipeline.
+
+
+GitHub push
+↓
+Jenkins build
+↓
+Jenkins push image to Docker Hub
+↓
+Jenkins tells Kubernetes to update Deployment
+↓
+Kubernetes creates new Pods with the new image
+↓
+Old Pods are removed
+
+
+step -1 Add kubeconfig to Jenkins
+First, find your kubeconfig file
+
+On your Ubuntu VM, run:
+
+cat ~/.kube/config
+
+
+Add it into Jenkins
+
+In Jenkins UI:
+
+Manage Jenkins → Credentials → Global → Add Credentials
+
+
+
+Choose:
+
+Kind: Secret file
+Upload the file: ~/.kube/config
+ID: minikube-kubeconfig
+
+
+deployement.yaml
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: anilarelli/my-app:jenkins-1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: APP_MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: my-app-config
+                  key: APP_MESSAGE
+            - name: SECRET_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-app-secret
+                  key: SECRET_TOKEN
+
+```
+
+jenkins file
+
+
+```
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "anilarelli/my-app"
+        IMAGE_TAG  = "jenkins-${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                '''
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh '''
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: 'minikube-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                    sh '''
+                    export KUBECONFIG=$KUBECONFIG_FILE
+
+                    kubectl get nodes
+                    kubectl set image deployment/my-app my-app=${IMAGE_NAME}:${IMAGE_TAG}
+                    kubectl rollout status deployment/my-app
+                    '''
+                }
+            }
+        }
+    }
+}
+
+```
+
+
+
+Error in configuration: * unable to read client-cert /home/kali/.minikube/profiles/minikube/client.crt for minikube due to open /home/kali/.minikube/profiles/minikube/client.crt: permission denied * unable to read client-key /home/kali/.minikube/profiles/minikube/client.key for minikube due to open /home/kali/.minikube/profiles/minikube/client.key: permission denied * unable to read certificate-authority /home/kali/.minikube/ca.crt for minikube due to open /home/kali/.minikube/ca.crt: permission denied [Pipeline] }
+
+
+
+
+
+
+
+
+
+
+
