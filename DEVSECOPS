@@ -1798,14 +1798,107 @@ pipeline {
 
 
 
-Error in configuration: * unable to read client-cert /home/kali/.minikube/profiles/minikube/client.crt for minikube due to open /home/kali/.minikube/profiles/minikube/client.crt: permission denied * unable to read client-key /home/kali/.minikube/profiles/minikube/client.key for minikube due to open /home/kali/.minikube/profiles/minikube/client.key: permission denied * unable to read certificate-authority /home/kali/.minikube/ca.crt for minikube due to open /home/kali/.minikube/ca.crt: permission denied [Pipeline] }
+ unable to read client-cert /home/kali/.minikube/profiles/minikube/client.crt for minikube due to open /home/kali/.minikube/profiles/minikube/client.crt: permission denied * unable to read client-key /home/kali/.minikube/profiles/minikube/client.key for minikube due to open /home/kali/.minikube/profiles/minikube/client.key: permission denied * unable to read certificate-authority /home/kali/.minikube/ca.crt for minikube due to open /home/kali/.minikube/ca.crt: permission denied [Pipeline] }
+
+
+kubectl config view --flatten > ~/minikube-kubeconfig-flat
+What this command does
+
+Let’s break it down carefully.
+
+kubectl config view
+
+This means:
+
+“Show me my current Kubernetes configuration.”
+
+--flatten
+
+This is the important part.
+
+It tells kubectl:
+
+“Take all external file references and embed their actual contents into the output.”
+
+So instead of:
+
+certificate-authority: /home/kali/.minikube/ca.crt
+
+it becomes something like:
+
+certificate-authority-data: LS0tLS1CRUdJTi...
+
+That long base64 text is the actual certificate content.
+
+So the new file becomes portable.
+
+> ~/minikube-kubeconfig-flat
+
+This saves the output into a new file in your home directory.
+
+So you are creating a new kubeconfig file specifically for Jenkins.
+
+
+Manage Jenkins → Credentials → Global → Add Credentials
+
+
+
+1. Check overall Pod state
+kubectl get pods -o wide
+What this does
+kubectl get pods lists all Pods
+-o wide adds more details like node and IP
+Why we run it
+
+We want to see whether the new Pod is:
+
+Running
+Pending
+CrashLoopBackOff
+ImagePullBackOff
+Error
 
 
 
 
+2. Inspect the Deployment status in detail
+kubectl describe deployment my-app
+What this does
+
+It prints the Deployment’s full state:
+
+desired replicas
+updated replicas
+available replicas
+rollout conditions
+event history
+
+
+3. Inspect the actual Pod
+
+First get the Pod name from kubectl get pods, then run:
+
+kubectl describe pod <pod-name>
+What this does
+
+This shows detailed Pod information:
+
+image used
+env vars
+mounted volumes
+container state
+restart count
+events at the bottom
 
 
 
+4. Read the application logs
+kubectl logs <pod-name>
+
+
+kubectl apply -f ~/devsecops-lab/deployment.yaml
+
+kubectl delete pod my-app-5844cddf7-trcnr
 
 
 
