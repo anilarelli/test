@@ -1901,5 +1901,313 @@ kubectl apply -f ~/devsecops-lab/deployment.yaml
 kubectl delete pod my-app-5844cddf7-trcnr
 
 
+Right now your system does:
+
+Deploy → Pod starts → Done
+
+But in real systems:
+
+Deploy → Check if app is READY → serve traffic
+       → Monitor if app is ALIVE → restart if needed
+       → Control resources → prevent crashes
+       → Update safely → zero downtime
+
+
+1. Namespaces (environment separation)
+
+
+What is a Namespace?
+
+A Namespace is:
+
+A logical boundary inside Kubernetes
+
+Think:
+
+One cluster → multiple environments
+
+Example:
+
+dev
+qa
+staging
+prod
+🧠 Why we need it
+
+Without namespace:
+
+All apps mixed together ❌
+Name conflicts ❌
+Hard to manage ❌
+
+With namespace:
+
+Isolation ✅
+Organization ✅
+Access control ✅
+
+🔧 Create namespace
+kubectl create namespace dev
+
+What this does
+creates a logical container called dev
+all resources inside it are isolated
+
+Use namespace
+kubectl get pods -n dev
+Meaning
+-n dev → operate inside dev namespace
+🧠 Important concept
+
+Same app name can exist in different namespaces:
+
+dev/my-app
+prod/my-app
+
+They don’t conflict.
+
+
+
+2. Readiness Probe (VERY IMPORTANT)
+🧠 Problem it solves
+
+Without readiness:
+
+Pod starts → Kubernetes sends traffic immediately ❌
+
+But your app might still be:
+
+loading
+connecting to DB
+not ready
+🧠 What readinessProbe does
+"Is this app ready to serve traffic?"
+
+If NOT ready:
+
+Kubernetes will NOT send traffic
+🔧 Example
+
+```
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 5000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+🧠 Deep explanation
+httpGet
+
+Kubernetes sends:
+
+GET /health
+
+to your app.
+
+initialDelaySeconds: 5
+Wait 5 seconds before first check
+
+Why?
+
+App needs time to start.
+
+periodSeconds: 5
+Check every 5 seconds
+🧠 Result
+
+If /health returns success:
+
+Pod becomes READY
+
+If not:
+
+Pod = NOT READY → no traffic
+
+
+
+
+
+3. Liveness Probe
+🧠 Problem it solves
+
+What if app:
+
+starts fine
+but later hangs or crashes silently?
+
+Without liveness:
+
+Kubernetes does nothing ❌
+🧠 What livenessProbe does
+"Is this app still alive?"
+
+If NOT:
+
+Kubernetes restarts the container
+🔧 Example
+
+
+```
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+```
+
+
+🧠 Difference from readiness
+Probe	Purpose
+readiness	should receive traffic?
+liveness	should restart container?
+🧠 Important insight
+readiness = traffic control
+liveness = self-healing
+
+
+
+
+4. Resource Requests & Limits
+🧠 Problem
+
+Without limits:
+
+One container can use all CPU/memory ❌
+Other apps crash ❌
+Node becomes unstable ❌
+🧠 Solution
+
+Kubernetes lets you define:
+
+requests → minimum needed
+limits → maximum allowed
+🔧 Example
+
+``` 
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+🧠 Explanation
+requests
+Scheduler guarantees this much
+
+Example:
+
+Need at least 128MB RAM
+limits
+Cannot exceed this
+
+If exceeded:
+
+Container may be killed (OOMKilled)
+🧠 CPU unit
+100m = 0.1 CPU
+1000m = 1 CPU
+
+
+
+
+
+5. Rolling Update Strategy
+🧠 What you used so far
+
+Default rolling update.
+
+But let’s understand control.
+
+🔧 Example
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+🧠 Meaning
+maxUnavailable: 0
+Never reduce running pods below desired
+
+→ ensures zero downtime
+
+maxSurge: 1
+Allow 1 extra pod during update
+🧠 Example flow (replicas=1)
+Old pod running
+↓
+Create 1 new pod
+↓
+Wait until ready
+↓
+Delete old pod
+
+
+
+
+6. Logs & Debugging (PRO LEVEL)
+🔧 Logs
+kubectl logs <pod>
+
+→ shows application logs
+
+🔧 Previous logs
+kubectl logs <pod> --previous
+
+→ if container restarted
+
+🔧 Describe
+kubectl describe pod <pod>
+
+→ shows:
+
+events
+errors
+why failed
+🔧 Events (important)
+kubectl get events
+
+→ cluster-level issues
+
+🧠 Debug flow (remember this)
+kubectl get pods
+↓
+kubectl describe pod
+↓
+kubectl logs
+↓
+kubectl get events
+
+This is how real engineers debug.
+
+
+
+What you just learned
+Namespaces → isolation
+Readiness → traffic control
+Liveness → auto-restart
+Resources → stability
+Rolling strategy → safe updates
+Debugging → real-world troubleshooting
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
