@@ -2237,7 +2237,14 @@ kubectl get pods -w - watch deployement live
 
 
 
+The 4 debugging commands we need
 
+Run these in order:
+
+kubectl get pods -o wide
+kubectl describe deployment my-app
+kubectl describe pod -l app=my-app
+kubectl logs -l app=my-app --tail=100
 
 
 
