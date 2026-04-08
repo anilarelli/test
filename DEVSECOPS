@@ -2195,12 +2195,45 @@ Debugging → real-world troubleshooting
 
 
 
+demployement.yaml
+
+modify container section
+
+```
+containers:
+- name: my-app
+  image: anilarelli/my-app:latest
+  ports:
+    - containerPort: 5000
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+```
 
 
 
 
-
-
+kubectl get pods -w - watch deployement live
 
 
 
