@@ -2248,6 +2248,12 @@ kubectl logs -l app=my-app --tail=100
 
 
 
+kubectl get deployment my-app -o yaml | grep image:
+kubectl describe pod my-app-5bd4fc6fdd-68gdg
+kubectl logs my-app-5bd4fc6fdd-68gdg
+kubectl logs my-app-5bd4fc6fdd-68gdg --previous
+
+
 
 
 
