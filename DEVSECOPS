@@ -2282,7 +2282,8 @@ kubectl logs my-app-5bd4fc6fdd-68gdg --previous
 
 
 
-
+minikube ip
+kubectl get svc
 
 
 
