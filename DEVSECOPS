@@ -2325,6 +2325,154 @@ kubectl get pods -n dev
 
 
 
+Cluster
+ ├── default namespace
+ │     ├── Pods
+ │     ├── Deployments
+ │     └── Services
+ │
+ ├── monitoring namespace
+ │     └── (empty right now)
+ │
+ ├── dev namespace
+ │     └── (maybe empty)
+
+
+
+
+
+deploy your app into dev namespace
+
+Run:
+
+kubectl apply -f deployment.yaml -n dev
+kubectl apply -f service.yaml -n dev
+
+
+kubectl get pods -n dev
+
+kubectl get pods -A - Shows Pods across ALL namespaces
+
+
+
+
+
+
+Docker → build images ✅
+Git → push code ✅
+Jenkins → CI pipeline ✅
+Trivy/ZAP → security scanning ✅
+Kubernetes → deployment ✅
+Namespaces → isolation ✅
+Probes → health checks ✅
+Resources → stability control ✅
+Rolling updates → zero downtime deploys ✅
+
+
+
+🔹 CI (Continuous Integration)
+
+You already have it:
+
+Code push → Jenkins runs pipeline
+
+Pipeline does:
+
+build Docker image
+scan image (Trivy)
+scan app (ZAP)
+
+👉 That is CI
+
+
+
+🔹 CD (Continuous Deployment)
+
+This is where you are partially there
+
+Right now you did:
+
+Jenkins builds image
+↓
+You manually deploy to Kubernetes
+
+That is:
+
+CI + manual CD
+
+
+Real DevSecOps = Fully automated CD
+
+Goal:
+
+Git push
+↓
+Jenkins builds + scans
+↓
+Jenkins pushes image
+↓
+Jenkins deploys to Kubernetes
+↓
+Kubernetes rolls out safely
+
+👉 No manual kubectl
+
+
+
+Full CI/CD Automation (Jenkins → Kubernetes)
+What you will build now
+
+Pipeline will do:
+
+Stage 1: Build Docker image
+Stage 2: Scan (Trivy)
+Stage 3: Push to DockerHub
+Stage 4: Deploy to Kubernetes
+Stage 5: Verify rollout
+
+
+
+jenkins piple for automatated deployement
+
+```
+stage('Deploy to Kubernetes') {
+    steps {
+        sh '''
+        kubectl set image deployment/my-app my-app=anilarelli/my-app:jenkins-${BUILD_NUMBER} -n dev
+        kubectl rollout status deployment/my-app -n dev
+        '''
+    }
+}
+
+```
+
+
+
+This is REAL CD
+
+Now your system becomes:
+
+Code change
+↓
+Git push
+↓
+Jenkins pipeline
+↓
+Automatic Kubernetes deployment
+
+👉 That is end-to-end DevSecOps pipeline
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
