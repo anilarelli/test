@@ -2467,11 +2467,36 @@ Automatic Kubernetes deployment
 
 
 
+Install Ingress Controller
+
+minikube addons enable ingress
+
+kubectl get pods -n ingress-nginx
 
 
 
+ingress.yaml
 
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app-ingress
+  namespace: dev
+spec:
+  rules:
+  - host: myapp.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-app-service
+            port:
+              number: 5000
 
+```
 
 
 
