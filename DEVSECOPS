@@ -2289,6 +2289,39 @@ kubectl get svc
 minikube service my-app-service - This usually opens your browser with the correct URL.
 
 
+we have touched:
+
+readiness probes
+liveness probes
+rollout behavior
+logs/events debugging
+
+
+
+What a namespace is
+
+A namespace is a logical boundary inside one Kubernetes cluster.
+
+Think of it like this:
+
+One cluster
+↓
+split into separate rooms
+
+Each room can have its own:
+
+Pods
+Deployments
+Services
+ConfigMaps
+Secrets
+
+So instead of all resources being mixed together, they are grouped by purpose or environment.
+
+kubectl create namespace dev
+kubectl get namespaces
+kubectl get pods -n dev
+
 
 
 
