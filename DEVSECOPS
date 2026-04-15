@@ -2499,6 +2499,81 @@ spec:
 ```
 
 
+ConfigMaps & Secrets
+
+
+Dynamic + secure configuration ✅
+
+
+| Type      | Use for                            |
+| --------- | ---------------------------------- |
+| ConfigMap | normal config (APP_MESSAGE)        |
+| Secret    | sensitive data (tokens, passwords) |
+
+
+
+Kubernetes
+   ↓
+ConfigMap / Secret
+   ↓
+Injected into Pod
+   ↓
+App reads via env vars
+
+
+
+
+Step 1 — Create ConfigMap
+
+kubectl create configmap app-config \
+  --from-literal=APP_MESSAGE="Hello from ConfigMap" -n dev
+
+
+
+Step 2 — Create Secret
+
+
+kubectl create secret generic app-secret --from-literal=SECRET_TOKEN="supersecret123" -n dev
+
+Base64 encoded (not encrypted by default)
+
+
+
+
+Step 3 — Inject into Deployment
+
+
+Modify your deployment.yaml
+
+🔥 Add this inside container
+```
+env:
+  - name: APP_MESSAGE
+    valueFrom:
+      configMapKeyRef:
+        name: app-config
+        key: APP_MESSAGE
+
+  - name: SECRET_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: app-secret
+        key: SECRET_TOKEN
+```
+
+
+kubectl apply -f deployment.yaml -n dev
+
+kubectl logs -n dev <pod-name>
+
+ 
+kubectl edit configmap app-config -n dev - Change config WITHOUT rebuilding Docker image
+
+
+
+
+
+
 
 
 
