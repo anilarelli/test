@@ -2734,7 +2734,11 @@ kubectl get all
 
 
 
-
+CI → Jenkins
+Containers → Docker
+Orchestration → Kubernetes
+Packaging → Helm
+Deployment → ArgoCD (GitOps)
 
 
 
