@@ -2570,6 +2570,244 @@ kubectl logs -n dev <pod-name>
 kubectl edit configmap app-config -n dev - Change config WITHOUT rebuilding Docker image
 
 
+What is Helm (first principles)
+
+👉 Helm
+
+Helm is:
+
+Package manager for Kubernetes
+
+Just like:
+
+apt → installs packages on Linux
+npm → installs JS packages
+
+Helm:
+
+Installs applications on Kubernetes
+
+
+Problem Helm solves
+
+Right now your deployment is:
+
+deployment.yaml
+service.yaml
+ingress.yaml
+configmap.yaml
+secret.yaml
+
+Problems:
+
+too many files
+hard to manage versions
+no reuse
+no environment configs
+manual updates
+
+
+
+
+
+Helm solution
+
+Helm converts this into:
+
+Helm Chart (package)
+
+Which contains:
+
+templates/
+values.yaml
+Chart.yaml
+
+
+🚀 Step 1 — Install Helm
+
+
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+helm version
+
+
+Step 2 — Create your first chart
+helm create my-app-chart
+
+
+my-app-chart/
+ ├── Chart.yaml
+ ├── values.yaml
+ ├── templates/
+ │    ├── deployment.yaml
+ │    ├── service.yaml
+ │    ├── ingress.yaml
+
+
+What each file means
+Chart.yaml
+Metadata about your app
+values.yaml
+All configurable values (VERY IMPORTANT)
+templates/
+Actual Kubernetes YAML with variables
+
+
+
+Step 3 — Modify values.yaml
+
+Edit:
+
+image:
+  repository: anilarelli/my-app
+  tag: jenkins-47
+
+
+
+You can change version like:
+
+helm upgrade my-app my-app-chart --set image.tag=jenkins-48
+
+
+Step 4 — Update deployment template
+
+Go to:
+
+templates/deployment.yaml
+
+Find image section and modify:
+
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+
+
+
+
+Step 5 — Install Helm chart
+helm install my-app my-app-chart -n dev
+🧠 What this does
+Helm renders templates
+↓
+Applies to Kubernetes
+↓
+Creates Deployment + Service + Ingress
+
+
+
+Step 6 — Verify
+kubectl get pods -n dev
+helm list -n dev
+
+
+
+
+Rollback
+helm rollback my-app 1 -n dev
+
+Rollback to previous version.
+
+
+Your task now
+Install Helm
+Create chart
+Update image config
+Install chart
+
+
+helm list -n dev shows release
+
+
+helm env
+
+
+helm upgrade my-app ./my-app-chart -n dev
+
+
+
+helm list -A
+helm status my-app -n dev
+
+helm uninstall my-app -n dev
+
+
+helm list
+kubectl get all
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
