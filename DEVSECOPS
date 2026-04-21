@@ -2741,43 +2741,159 @@ Packaging → Helm
 Deployment → ArgoCD (GitOps)
 
 
+Next Topic: GitOps (Production-Level Deployment)
+
+👉 We’ll use: Argo CD
 
 
 
 
+First Principle — What is GitOps?
+
+Right now your flow is:
+
+Jenkins → helm upgrade → Kubernetes
+
+👉 This is:
+
+Push-based deployment
+
+
+GitOps Solution
+Git = Source of Truth
+
+New flow:
+
+Git repo (Helm chart)
+↓
+ArgoCD watches repo
+↓
+Detects changes
+↓
+Automatically deploys to Kubernetes
+
+
+Key idea
+You NEVER run kubectl or helm manually
+
+Instead:
+
+You change Git → system updates itself
+
+
+
+GitHub (Helm chart)
+↓
+ArgoCD (running in cluster)
+↓
+Kubernetes (desired state)
 
 
 
 
+Step 1 — Install ArgoCD
+
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+
+
+Step 2 — Access ArgoCD UI
+
+
+kubectl port-forward svc/argocd-server -n argocd 8081:443
+
+https://localhost:8081
+
+
+Step 3 — Get login password
+
+
+kubectl get secret argocd-initial-admin-secret -n argocd -o yaml
+
+echo <password> | base64 -d
+
+
+Step 4 — Push your Helm chart to GitHub
+
+
+github.com/anilarelli/my-app-helm
+
+
+Step 5 — Create ArgoCD Application
+
+Inside ArgoCD UI:
+
+New App
+Name: my-app
+Repo: your GitHub repo
+Path: my-app-chart
+Cluster: default
+Namespace: dev
+
+
+ArgoCD clones your repo
+↓
+Reads Helm chart
+↓
+Applies to Kubernetes
+↓
+Keeps it in sync
+
+
+
+Step 5 — Create Application in Argo CD
+
+This is where everything connects:
+
+GitHub (Helm chart)
+↓
+ArgoCD watches it
+↓
+Automatically deploys to Kubernetes
+
+
+First — confirm ArgoCD is running
+
+Run:
+
+kubectl get pods -n argocd
+
+You should see pods like:
+
+argocd-server
+argocd-repo-server
+argocd-application-controller
+
+
+Step 1 — Access ArgoCD UI
+
+Run:
+
+kubectl port-forward svc/argocd-server -n argocd 8081:443
+
+Open browser:
+
+https://localhost:8081
 
 
 
 
+Step 2 — Login
+
+kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 -d
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+What happens now
+ArgoCD clones your GitHub repo
+↓
+Reads Helm chart
+↓
+Renders templates
+↓
+Applies to Kubernetes
 
 
 
