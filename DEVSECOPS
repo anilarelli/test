@@ -2898,10 +2898,49 @@ Applies to Kubernetes
 
 
 
+Observability
+
+
+Right Now
+
+App is running ✅
+But you DON’T know:
+- CPU usage
+- Memory usage
+- request rate
+- failures over time
+- latency
+
+
+Observability = 3 pillars
+1. Logs        → what happened
+2. Metrics     → how system behaves over time
+3. Traces      → how requests flow
+
+
+Prometheus
+
+👉 Collects metrics
+
+CPU, Memory, Pod status, HTTP metrics
+📈 Grafana
+
+👉 Visualizes metrics
+
+Dashboards, graphs, alerts
 
 
 
-
+Kubernetes Cluster
+│
+├── kubelet → exposes node metrics
+├── cAdvisor → container metrics
+├── kube-state-metrics → pod/deployment info
+│
+↓
+Prometheus (scrapes metrics)
+↓
+Grafana (visualizes)
 
 
 
