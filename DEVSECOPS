@@ -2945,33 +2945,144 @@ Grafana (visualizes)
 
 
 
+Architecture (understand this clearly)
+Kubernetes Cluster
+│
+├── kubelet → exposes node metrics
+├── cAdvisor → container metrics
+├── kube-state-metrics → pod/deployment info
+│
+↓
+Prometheus (scrapes metrics)
+↓
+Grafana (visualizes)
+
+
+Step 1 — 
+
+
+Install monitoring stack (easy way)
+
+We use Helm (like a real setup):
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+
+Install full stack
+helm install monitoring prometheus-community/kube-prometheus-stack
 
 
 
 
 
+What this installs
+✔ Prometheus
+✔ Grafana
+✔ Alertmanager
+✔ Node Exporter
+✔ kube-state-metrics
+
+
+Step 2 — Verify installation
+kubectl get pods -n default
+
+You should see:
+
+monitoring-prometheus-...
+monitoring-grafana-...
+monitoring-kube-state-metrics...
+
+
+Step 3 — Access Grafana
+
+Port forward:
+
+kubectl port-forward svc/monitoring-grafana 3000:80
+
+Open:
+
+http://localhost:3000
+
+
+
+Login
+
+Username:
+
+admin
+
+Password:
+
+kubectl get secret monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 --decode
+
+
+Step 4 — Explore dashboards
+
+In Grafana:
+
+👉 Go to Dashboards
+
+You’ll see:
+
+Kubernetes / Cluster
+Nodes
+Pods
+Workloads
+
+
+
+Pod metrics
+
+Look for your app:
+
+my-app
+
+Check:
+
+CPU usage
+Memory usage
+restarts
+pod status
+
+
+
+Node metrics
+Minikube node health
+🔥 Deployment health
+replicas
+available pods
+
+
+
+Important limitation (VERY IMPORTANT)
+
+Right now Prometheus sees:
+
+✔ CPU / memory
+✔ pod status
+
+BUT NOT:
+
+❌ HTTP requests (/health, /)
+❌ response times
+❌ errors
 
 
 
 
 
+Before observability
+App fails → you guess
 
+After observability
 
+App fails → you SEE:
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- CPU spike?
+- memory leak?
+- probe failures?
+- restart loops?
 
 
 
