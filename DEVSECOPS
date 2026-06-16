@@ -1,4 +1,22 @@
 
+
+If your goal is to become a DevSecOps Engineer, then Kubernetes alone is not enough anymore.
+
+Most companies today want:
+
+Cloud Security
+      +
+Kubernetes Security
+      +
+CI/CD Security
+      +
+Container Security
+      +
+Monitoring
+
+
+
+
 ### logs in real time
 
 tail -f /var/log/nginx/access.log
