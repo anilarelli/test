@@ -14,6 +14,22 @@ Container Security
       +
 Monitoring
 
+Think of DevSecOps as a pyramid:
+
+                 Cloud Security (AWS/EKS)
+                        ▲
+                 Kubernetes Security
+                        ▲
+               Container Security
+                        ▲
+                Application Security
+                        ▲
+                   CI/CD Security
+                        ▲
+                 Linux + Docker
+
+
+secure the pipeline → secure containers → secure Kubernetes → secure runtime → secure supply chain → then secure cloud infrastructure.
 
 
 
