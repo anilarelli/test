@@ -3304,7 +3304,15 @@ You've actually completed a pretty realistic DevSecOps pipeline already:
 ✅ Grafana dashboards
 
 
+Next Module: CI/CD Security (Shift Left)
 
+We'll start with:
+
+1. Gitleaks
+2. SonarQube
+3. Trivy (Filesystem Scan)
+
+in that exact order.
 
 
 
