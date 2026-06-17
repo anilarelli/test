@@ -3425,6 +3425,14 @@ This is common when onboarding Gitleaks to an existing large codebase.
 
 Option 3: Ignore Specific File
 
+Create .gitleaksignore
+
+Example:
+
+test.py
+config/dev.env
+
+
 
 What companies usually do
 
@@ -3447,7 +3455,15 @@ Good answer:
 
 
 
+Jenkins Integration
 
+After we confirm Gitleaks works locally, we'll add a Jenkins stage:
+
+stage('Secret Scan') {
+    steps {
+        sh 'gitleaks detect --source .'
+    }
+}
 
 
 
