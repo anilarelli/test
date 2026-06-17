@@ -3317,6 +3317,179 @@ in that exact order.
 
 
 
+Architecture
+
+Current pipeline:
+
+GitHub
+  ↓
+Jenkins
+  ↓
+Docker Build
+  ↓
+Docker Hub
+  ↓
+ArgoCD
+  ↓
+Kubernetes
+
+
+After Gitleaks:
+
+GitHub
+  ↓
+Gitleaks
+  ↓
+Jenkins
+  ↓
+Docker Build
+  ↓
+Docker Hub
+  ↓
+ArgoCD
+  ↓
+Kubernetes
+
+If secrets are found:
+
+Pipeline FAILS
+
+before deployment.
+
+
+
+Install Gitleaks
+
+
+wget https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz
+
+tar -xzf gitleaks_linux_x64.tar.gz
+
+sudo mv gitleaks /usr/local/bin/
+
+
+gitleaks version
+
+
+Real Interview Question
+
+Many interviewers ask:
+
+How do you prevent secrets from being committed to source control?
+
+Good answer:
+
+1. Gitleaks in CI/CD
+2. Pre-commit hooks
+3. Vault/Secrets Manager
+4. Never store secrets in Git
+
+
+
+gitleaks detect --source .
+gitleaks detect --no-git --source .    -   This scans the current filesystem instead of Git commits.
+gitleaks detect --no-git --source . -v
+gitleaks detect --no-git --source . --report-format json --report-path report.json
+cat report.json | jq .
+
+
+
+Option 1: Ignore a specific line (Best Practice)
+
+API_KEY = "dummy-test-value"  # gitleaks:allow - Gitleaks will ignore that line only.
+
+
+
+Option 2: Baseline File (Enterprise Approach)
+
+Generate a baseline:
+
+gitleaks detect \
+  --no-git \
+  --source . \
+  --report-format json \
+  --report-path baseline.json
+
+Then:
+
+gitleaks detect \
+  --no-git \
+  --source . \
+  --baseline-path baseline.json
+
+Now findings already present in the baseline are ignored.
+
+This is common when onboarding Gitleaks to an existing large codebase.
+
+
+
+Option 3: Ignore Specific File
+
+
+What companies usually do
+
+For CI/CD pipelines:
+
+True Positive  -> Fix immediately
+False Positive -> Add gitleaks:allow
+Legacy Findings -> Baseline file
+
+Interviewers often ask:
+
+"What do you do when a security scanner generates false positives?"
+
+Good answer:
+
+1. Validate the finding
+2. Keep true positives
+3. Suppress false positives using allowlists/baselines
+4. Never disable entire detection rules unnecessarily
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
