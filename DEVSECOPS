@@ -1337,6 +1337,8 @@ kubectl apply -f service.yaml
 
 check pods - kubectl get pods
 
+kubectl get pods -n default | grep grafana
+
 Access app - minikube service my-app-service
 
 
