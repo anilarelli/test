@@ -3315,7 +3315,7 @@ We'll start with:
 in that exact order.
 
 
-
+1. Gitleaks
 
 Architecture
 
@@ -3467,32 +3467,124 @@ stage('Secret Scan') {
 
 
 
+2. SonarQube(SAST)
+
+
+Why SonarQube before Trivy?
+
+SonarQube secures the source code.
+
+Trivy secures the container image.
+
+Because the security order is:
+
+Code
+ ↓
+Dependencies
+ ↓
+Container
+ ↓
+Kubernetes
+ ↓
+Runtime
+
+SonarQube secures the source code.
+
+
+After SonarQube:
+
+GitHub
+  ↓
+Gitleaks
+  ↓
+SonarQube
+  ↓
+Docker Build
+  ↓
+Docker Hub
+  ↓
+ArgoCD
+  ↓
+Kubernetes
+
+
+
+
+I recommend running SonarQube in Kubernetes so you gain Kubernetes experience rather than using a standalone Docker container.
+
+
+
+Step 1: Create a namespace
+kubectl create namespace sonarqube
+
+
+Step 2: Add Helm repository
+helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
+helm repo update
+
+
+
+Step 3: Install SonarQube
+
+For a learning lab:
+helm install sonarqube sonarqube/sonarqube  -n sonarqube --set community.enabled=true --set monitoringPasscode=admin123
+
+Wait a few minutes.
+Check:
+kubectl get pods -n sonarqube
+
+
+
+Step 4: Access SonarQube
+
+Port-forward:
+kubectl port-forward svc/sonarqube-sonarqube 9000:9000 -n sonarqube
+
+
+Open:
+http://localhost:9000
+
+Default login:
+admin
+admin
 
 
 
 
 
+Step 5: Create a Project
+
+Inside SonarQube:
+Create Project
+Manual Project
+Name: my-app
+Generate Token
+
+Save the token. You'll need it for Jenkins.
 
 
 
 
 
+Step 6: Scan Locally First
 
+Before Jenkins integration, install scanner:
+wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-7.1.0.4889-linux-x64.zip
+unzip sonar-scanner-*.zip
 
+Create:
 
+sonar-project.properties
+sonar.projectKey=my-app
+sonar.projectName=my-app
 
+sonar.sources=.
+sonar.host.url=http://localhost:9000
+sonar.token=<YOUR_TOKEN>
 
+Run:
 
-
-
-
-
-
-
-
-
-
-
+sonar-scanner
 
 
 
