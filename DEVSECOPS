@@ -3542,7 +3542,6 @@ Check:
 kubectl get pods -n sonarqube
 
 
-
 Step 4: Access SonarQube
 
 Port-forward:
@@ -3557,9 +3556,6 @@ admin
 admin
 
 
-
-
-
 Step 5: Create a Project
 
 Inside SonarQube:
@@ -3571,28 +3567,22 @@ Generate Token
 Save the token. You'll need it for Jenkins.
 
 
-
-
-
 Step 6: Scan Locally First
 
 Before Jenkins integration, install scanner:
-wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-7.1.0.4889-linux-x64.zip
-unzip sonar-scanner-*.zip
 
-Create:
+pip install pysonar
 
-sonar-project.properties
-sonar.projectKey=my-app
-sonar.projectName=my-app
+~/.local/bin/pysonar --help
 
-sonar.sources=.
-sonar.host.url=http://localhost:9000
-sonar.token=<YOUR_TOKEN>
+echo 'export PATH=$PATH:$HOME/.local/bin' >> ~/.bashrc
 
-Run:
+source ~/.bashrc
 
-sonar-scanner
+which pysonar
+
+ pysonar   --sonar-host-url=http://127.0.0.1:9000   --sonar-token=sqp_bcbb54d7d4058464910c7786d1956335c2a9d0e3   --sonar-project-key=my-app
+
 
 
 
