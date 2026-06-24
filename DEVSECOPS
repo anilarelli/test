@@ -3583,46 +3583,308 @@ which pysonar
 
  pysonar   --sonar-host-url=http://127.0.0.1:9000   --sonar-token=sqp_bcbb54d7d4058464910c7786d1956335c2a9d0e3   --sonar-project-key=my-app
 
+go to sonarqube dashboard and check the results
+
+
+
+Jenkins + SonarQube Integration
+
+Right now:
+
+Git Push
+   ↓
+Manual pysonar run
+   ↓
+SonarQube
+
+We want:
+
+Git Push
+   ↓
+Jenkins
+   ↓
+SonarQube Scan
+   ↓
+Quality Gate
+   ↓
+Continue Pipeline
+
+
+Step 2: Install SonarQube Scanner Plugin in Jenkins
+
+Open Jenkins:
+
+Manage Jenkins
+  → Plugins
+  → Available Plugins
+
+Install:
+
+SonarQube Scanner
+
+After installation:
+
+Manage Jenkins
+  → System
+
+Find:
+
+SonarQube Servers
+
+Add:
+
+Name:
+sonarqube
+
+Server URL:
+http://192.168.45.1:9000
+
+
+
+
+Step 3: Add Sonar Token to Jenkins
+
+Create credential:
+
+Manage Jenkins
+  → Credentials
+  → Global
+  → Add Credentials
+
+Type:
+
+Secret Text
+
+Secret:
+
+<your new Sonar token>
+
+ID:
+
+sonar-token
+
+
+Step 4: Configure Scanner Tool
+Manage Jenkins
+  → Global Tool Configuration
+
+Add:
+
+SonarScanner
+
+Name:
+
+sonar-scanner
+
+Auto install:
+
+Enabled
+
+
+Step 5: Update Jenkinsfile
+
+Later we'll add a stage like:
+
+stage('SonarQube Scan') {
+    steps {
+        withSonarQubeEnv('sonarqube') {
+            sh '''
+            pysonar \
+              --sonar-host-url=$SONAR_HOST_URL \
+              --sonar-token=$SONAR_AUTH_TOKEN \
+              --sonar-project-key=my-app
+            '''
+        }
+    }
+}
+
+Then another stage:
+
+stage('Quality Gate') {
+    steps {
+        timeout(time: 5, unit: 'MINUTES') {
+            waitForQualityGate abortPipeline: true
+        }
+    }
+}
+
+This is where Jenkins blocks deployment if SonarQube finds critical issues.
+
+
+Error troubleshooting
+
+Error 1
+
+
+sudo -u jenkins which pysonar - empty output
+
+
+Jenkins runs as:
+
+jenkins
+
+but pysonar is installed in:
+
+/home/kali/.local/bin/pysonar
+
+
+Fix Option 1 (Recommended)
+
+Install pysonar for Jenkins:
+
+sudo -u jenkins python3 -m pip install --user pysonar
+
+Then verify:
+
+sudo -u jenkins ~/.local/bin/pysonar --help
+
+
+
+
+Fix Option 2 (Quick Lab Fix)
+
+Find the pysonar path:
+
+which pysonar
+
+You already have:
+
+/home/kali/.local/bin/pysonar
+
+Change Jenkinsfile temporarily:
+
+stage('SonarQube Scan') {
+    steps {
+        sh '''
+        /home/kali/.local/bin/pysonar \
+          --sonar-host-url=$SONAR_HOST_URL \
+          --sonar-token=$SONAR_AUTH_TOKEN \
+          --sonar-project-key=my-app
+        '''
+    }
+}
+
+
+or directly mention jenkins installation location
+
+
+Then update Jenkinsfile
+
+Use:
+
+sh '''
+/var/lib/jenkins/.local/bin/pysonar \
+  --sonar-host-url=$SONAR_HOST_URL \
+  --sonar-token=$SONAR_AUTH_TOKEN \
+  --sonar-project-key=my-app
+'''
 
 
 
 
 
 
+Error 2
+
+
+[Pipeline] waitForQualityGate Checking status of SonarQube task '88d96943-7510-43e5-9f48-c2105542afff' on server 'sonarqube' SonarQube task '88d96943-7510-43e5-9f48-c2105542afff' status is 'IN_PROGRESS' Cancelling nested steps due to timeout
+
+
+
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                waitForQualityGate abortPipeline: true
+            }
+
+
+Most likely cause: Webhook missing
+
+waitForQualityGate() requires a webhook from SonarQube back to Jenkins.
+
+Check SonarQube Webhook
+
+In SonarQube:
+
+Administration
+→ Configuration
+→ Webhooks
+
+You should have a webhook like:
+
+Name: Jenkins
+
+URL:
+http://<jenkins-url>/sonarqube-webhook/
+
+Important: Must end with:
+
+/sonarqube-webhook/
+
+including the trailing slash.
+
+Examples:
+
+http://192.168.1.100:8080/sonarqube-webhook/
+
+
+Skip a stage in jenkins
+
+There are several ways to skip a stage in Jenkins.
+
+1. Temporarily comment out the stage
+/*
+stage('Quality Gate') {
+    steps {
+        timeout(time: 15, unit: 'MINUTES') {
+            waitForQualityGate abortPipeline: true
+        }
+    }
+}
+*/
 
 
 
 
 
+Error 3 
+
+
+ kubectl get nodes
+E0623 23:14:55.223309  258140 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.49.2:8443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"minikubeCA\")"
+E0623 23:14:55.226246  258140 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.49.2:8443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"minikubeCA\")"
+E0623 23:14:55.228750  258140 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.49.2:8443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"minikubeCA\")"
+E0623 23:14:55.231106  258140 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.49.2:8443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"minikubeCA\")"
+E0623 23:14:55.233663  258140 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.49.2:8443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"minikubeCA\")"
+Unable to connect to the server: tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of "crypto/rsa: verification error" while trying to verify candidate authority certificate "minikubeCA")
+[Pipeline] }
+
+
+kubectl get nodes
+
+kubectl config view --raw --flatten > /tmp/jenkins-kubeconfig
+
+sudo -u jenkins kubectl get nodes
 
 
 
 
 
+Update Jenkins Permanently
+
+In your Jenkins pipeline, add:
 
 
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: 'minikube-kubeconfig-flat', variable: 'KUBECONFIG_FILE')]) {
+                    sh '''
+                    export KUBECONFIG=/var/lib/jenkins/.kube/config -  this is updated & provide permissions to jenkins user
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                    kubectl get nodes
+                    kubectl set image deployment/myapp-my-app-chart -n dev my-app-chart=${IMAGE_NAME}:${IMAGE_TAG}
+                    kubectl rollout status deployment/myapp-my-app-chart -n dev
 
 
 
