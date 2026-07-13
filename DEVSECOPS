@@ -1345,7 +1345,59 @@ check pods - kubectl get pods
 
 kubectl get pods -n default | grep grafana
 
-Access app - minikube service my-app-service
+Access app -
+
+Option 1 (Recommended): Port-forward
+
+Find the service port:
+
+kubectl get svc myapp-my-app-chart -n dev
+
+If the service port is 80:
+
+kubectl port-forward svc/myapp-my-app-chart 8087:80 -n dev
+
+If the service port is 5000:
+
+kubectl port-forward svc/myapp-my-app-chart 8087:5000 -n dev
+
+Then open:
+
+http://localhost:8087
+
+
+
+Option 2: Change the Service to NodePort
+
+If you want to use:
+
+minikube service myapp-my-app-chart -n dev
+
+then your Service must be a NodePort.
+
+Edit it:
+
+kubectl edit svc myapp-my-app-chart -n dev
+
+Change:
+
+type: ClusterIP
+
+to:
+
+type: NodePort
+
+Save and exit.
+
+Then:
+
+minikube service myapp-my-app-chart -n dev
+
+will open the application automatically.
+
+
+
+
 
 
 
