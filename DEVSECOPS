@@ -3943,7 +3943,25 @@ In your Jenkins pipeline, add:
 
 
 
+What we've completed
 
+You now have hands-on experience with:
+
+✅ Git
+✅ GitHub
+✅ Docker
+✅ Docker Hub
+✅ Jenkins
+✅ Declarative Pipelines
+✅ Secrets/Credentials
+✅ Gitleaks
+✅ SonarQube
+✅ Kubernetes
+✅ Minikube
+✅ Helm
+✅ ArgoCD (GitOps)
+
+That's already a very solid DevSecOps foundation.
 
 
 
