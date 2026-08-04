@@ -4170,6 +4170,8 @@ Jenkins
 
 
 Lab 1: Filesystem Scan
+
+
 What is a Filesystem Scan?
 
 Before Docker builds an image, your project exists as files on disk.
@@ -4272,6 +4274,89 @@ Analyze configurations
    │
    ▼
 Generate report
+
+
+Lab 2 – Docker Image Scanning
+
+Why scan the image after scanning the filesystem?
+
+trivy fs scans your project files.
+
+trivy image scans the final Docker image.
+
+During the Docker build, your image gains many additional components:
+
+Project Files
+      │
+      ▼
+Docker Build
+      │
+      ▼
+Final Image
+      │
+      ├── Debian/Ubuntu/Alpine packages
+      ├── Python runtime
+      ├── OpenSSL
+      ├── glibc
+      ├── libssl
+      ├── bash
+      └── Your application
+
+Many vulnerabilities exist in these OS packages, not in your source code.
+
+
+Add it to Jenkins
+
+After your Docker build stage, add:
+
+stage('Trivy Image Scan') {
+    steps {
+        sh '''
+        trivy image \
+        --severity CRITICAL \
+        --exit-code 1 \
+        ${IMAGE_NAME}:${IMAGE_TAG}
+        '''
+    }
+}
+
+This ensures only images meeting your policy continue through the pipeline.
+
+
+
+
+Next improvement: Generate an HTML report
+
+Instead of only printing results in the console, generate a report:
+
+trivy image \
+--format template \
+--template "@contrib/html.tpl" \
+-o trivy-report.html \
+anilarelli/my-app:<your-tag>
+
+Then archive it in Jenkins:
+
+post {
+    always {
+        archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+    }
+}
+
+This lets you download and review the report after every build.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
