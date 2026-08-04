@@ -3363,6 +3363,46 @@ You've actually completed a pretty realistic DevSecOps pipeline already:
 ✅ Prometheus metrics
 ✅ Grafana dashboards
 
+Phase 1: Shift Left Security
+Gitleaks 
+SonarQube 
+
+Phase 2: Container Security
+Trivy
+Docker Hardening
+
+Phase 3: Kubernetes Security
+Security Contexts
+RBAC
+Network Policies
+kube-bench
+kube-hunter
+
+Phase 4: Runtime Security
+Falco
+
+Phase 5: DAST
+OWASP ZAP
+
+Phase 6: Secrets
+Vault
+
+Phase 7: Supply Chain
+Syft
+Cosign
+
+Phase 8: Policy as Code
+Kyverno
+OPA Gatekeeper
+
+Phase 9: Cloud Security
+AWS IAM
+EKS
+IRSA
+Security Hub
+GuardDuty
+Inspector
+
 
 Next Module: CI/CD Security (Shift Left)
 
@@ -3374,6 +3414,7 @@ We'll start with:
 
 in that exact order.
 
+Phase 1 
 
 1. Gitleaks
 
@@ -3965,7 +4006,24 @@ That's already a very solid DevSecOps foundation.
 
 
 
+Our current pipeline is:
 
+GitHub
+   │
+   ▼
+Jenkins
+   │
+   ├── Gitleaks ✅
+   ├── SonarQube ✅
+   ├── waitForQualityGate ⏸️ (we'll revisit later)
+   ▼
+Docker Build
+   ▼
+Docker Push
+   ▼
+Kubernetes
+
+The next step is to prevent vulnerable container images from reaching Kubernetes.
 
 
 
