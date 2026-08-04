@@ -4027,3 +4027,256 @@ The next step is to prevent vulnerable container images from reaching Kubernetes
 
 
 
+Phase 2 – Container Security
+
+We'll start with Trivy.
+
+Lesson 1 – Why do we need Trivy?
+
+Imagine your application code is perfect.
+
+
+Your Docker image contains much more than your application.
+
+For example:
+
+my-app
+│
+├── Flask Application
+├── Python
+├── OpenSSL
+├── glibc
+├── apt packages
+├── Debian libraries
+├── libssl
+├── libxml
+├── zlib
+├── Bash
+└── Hundreds of OS packages
+
+Even if your code has zero vulnerabilities, one of those packages may have a critical CVE.
+
+
+
+This is why we need another security layer
+GitHub
+      │
+      ▼
+SonarQube
+      │
+      ▼
+Docker Build
+      │
+      ▼
+Trivy
+      │
+      ▼
+Docker Push
+
+
+
+What does Trivy scan?
+
+Think of it as multiple scanners in one.
+
+                    Trivy
+                      │
+     ┌────────────────┼─────────────────┐
+     │                │                 │
+Filesystem         Docker Image     Kubernetes
+     │                │                 │
+Secrets         OS Packages        Misconfigurations
+Dependencies    Python Packages    RBAC
+Configs         Java Packages      Security Context
+Dockerfile      Node Modules       Network Policies
+
+
+
+
+
+Four major scan types
+1. Filesystem Scan
+
+Scans your project before building.
+
+Project
+│
+├── app.py
+├── requirements.txt
+├── Dockerfile
+├── secrets.txt
+└── config.yaml
+
+Command:
+
+trivy fs .
+
+Finds:
+
+Secrets
+Vulnerable Python packages
+Misconfigurations
+IaC issues
+2. Image Scan ⭐⭐⭐⭐⭐
+
+Most common in CI/CD.
+
+anilarelli/my-app:jenkins-55
+
+Command:
+
+trivy image anilarelli/my-app:jenkins-55
+
+Finds:
+
+OS package CVEs
+Python dependency CVEs
+Base image vulnerabilities
+3. Repository Scan
+
+Scans a Git repository directly.
+
+4. Kubernetes Scan
+
+Scans running workloads and manifests.
+
+
+
+Where does Trivy fit in our pipeline?
+
+Our updated pipeline will be:
+
+GitHub
+   │
+   ▼
+Jenkins
+   │
+   ├── Checkout
+   ├── Gitleaks
+   ├── SonarQube
+   ├── Docker Build
+   ├── Trivy Filesystem Scan
+   ├── Trivy Image Scan
+   ├── Docker Push
+   ├── Update Helm Values
+   └── Git Push
+            │
+            ▼
+         ArgoCD
+            │
+            ▼
+      Kubernetes
+
+
+
+Lab 1: Filesystem Scan
+What is a Filesystem Scan?
+
+Before Docker builds an image, your project exists as files on disk.
+
+For example:
+
+devsecops-lab/
+│
+├── app.py
+├── requirements.txt
+├── Dockerfile
+├── Jenkinsfile
+├── templates/
+├── static/
+└── ...
+
+Trivy reads these files directly.
+
+It does not need Docker.
+
+
+
+What does it look for?
+
+It checks for:
+
+1. Vulnerable dependencies
+
+Example:
+
+Flask==1.0
+
+Suppose Flask 1.0 has a known CVE.
+
+Trivy will report it.
+
+2. Secrets
+
+Example:
+
+AWS_SECRET_ACCESS_KEY="AKIAxxxxxxxx"
+
+
+3. Misconfigurations
+
+Example Dockerfile:
+
+FROM python:latest
+
+Trivy may flag using latest because image versions should be pinned for reproducibility.
+
+
+
+
+
+Run the scan
+
+From your project directory:
+
+cd ~/learn/devsecops-lab
+
+trivy fs .
+
+The . means:
+
+Scan the current directory recursively.
+What happens internally?
+
+When you execute:
+
+trivy fs .
+
+Trivy performs roughly these steps:
+
+Start
+   │
+   ▼
+Walk every file
+   │
+   ▼
+Identify package managers
+   │
+   ├── requirements.txt
+   ├── package-lock.json
+   ├── pom.xml
+   ├── go.mod
+   └── Dockerfile
+   │
+   ▼
+Extract dependency versions
+   │
+   ▼
+Compare against vulnerability database
+   │
+   ▼
+Search for secrets
+   │
+   ▼
+Analyze configurations
+   │
+   ▼
+Generate report
+
+
+
+
+
+
+
+
