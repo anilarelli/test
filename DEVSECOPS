@@ -4348,14 +4348,50 @@ This lets you download and review the report after every build.
 
 
 
+Phase 2 — Container Security
 
 
+Trivy ✅
+   ↓
+Docker Hardening ← NEXT
+   ↓
+Phase 3: Kubernetes Security
 
 
+What Docker Hardening means
 
+Trivy answers:
 
+"What vulnerabilities exist in my image?"
 
+Docker hardening answers:
 
+"How do I reduce the impact if my container is compromised?"
+
+For example, imagine an attacker gets command execution inside your Flask container.
+
+If the container is running like this:
+
+Container
+└── root
+    ├── install packages
+    ├── modify files
+    ├── access processes
+    └── potentially abuse Linux capabilities
+
+the attacker has significantly more power.
+
+A hardened container might instead look like:
+
+Container
+└── appuser
+    ├── no root privileges
+    ├── minimal filesystem
+    ├── read-only filesystem
+    ├── limited capabilities
+    └── no unnecessary tools
+
+That's the objective.
 
 
 
