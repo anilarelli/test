@@ -4413,9 +4413,11 @@ We'll do this practically with your existing Flask application.
 We'll intentionally see the difference between an insecure and hardened container.
 
 
+Important nuance:
 
+Container root is not automatically host root.
 
-
+Docker provides isolation mechanisms. But container root still has considerably more privilege than an unprivileged application user, and container escapes or kernel/runtime vulnerabilities can turn excessive privileges into a serious host-level risk.
 
 
 
