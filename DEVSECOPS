@@ -4395,6 +4395,27 @@ That's the objective.
 
 
 
+Docker Hardening Roadmap
+
+We'll do this practically with your existing Flask application.
+
+1. Run container as non-root ⭐
+2. Multi-stage builds
+3. Minimize the base image
+4. Remove unnecessary packages
+5. Read-only filesystem
+6. Drop Linux capabilities
+7. no-new-privileges
+8. Resource limits
+9. Secure Dockerfile practices
+10. Re-scan hardened image with Trivy
+
+We'll intentionally see the difference between an insecure and hardened container.
+
+
+
+
+
 
 
 
