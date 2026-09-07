@@ -4420,6 +4420,34 @@ Container root is not automatically host root.
 Docker provides isolation mechanisms. But container root still has considerably more privilege than an unprivileged application user, and container escapes or kernel/runtime vulnerabilities can turn excessive privileges into a serious host-level risk.
 
 
+| Phase                  | Technology                     | Status         |
+| ---------------------- | ------------------------------ | -------------- |
+| Foundation             | Docker                         | ✅ Done         |
+| Foundation             | Jenkins                        | ✅ Done         |
+| Foundation             | Kubernetes                     | ✅ Done         |
+| Foundation             | Helm                           | ✅ Done         |
+| Foundation             | ArgoCD                         | ✅ Done         |
+| Observability          | Prometheus                     | ✅ Done         |
+| Observability          | Grafana                        | ✅ Done         |
+| CI/CD Security         | Gitleaks                       | ✅ Done         |
+| CI/CD Security         | SonarQube Setup                | ✅ Done         |
+| CI/CD Security         | SonarQube Pipeline Integration | ⏳ Pending      |
+| CI/CD Security         | Trivy Filesystem               | ⏳ Pending      |
+| **Container Security** | **Docker Hardening**           | 🔥 **CURRENT** |
+| Container Security     | Trivy Image Scan               | ⏳              |
+| Container Security     | Syft / SBOM                    | ⏳              |
+| Kubernetes Security    | Security Contexts              | ⏳              |
+| Kubernetes Security    | RBAC                           | ⏳              |
+| Kubernetes Security    | Network Policies               | ⏳              |
+| Kubernetes Security    | kube-bench                     | ⏳              |
+| Kubernetes Security    | kube-hunter                    | ⏳              |
+| Runtime Security       | Falco                          | ⏳              |
+| DAST                   | OWASP ZAP                      | ⏳              |
+| Secrets                | Vault                          | ⏳              |
+| Supply Chain           | Cosign                         | ⏳              |
+| Policy as Code         | Kyverno                        | ⏳              |
+| Policy as Code         | OPA Gatekeeper                 | ⏳              |
+| Cloud Security         | AWS/EKS                        | ⏳              |
 
 
 
