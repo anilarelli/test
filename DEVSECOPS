@@ -4452,3 +4452,280 @@ Docker provides isolation mechanisms. But container root still has considerably 
 
 
 
+Docker Hardening – Part 1: Non-Root Containers
+
+Your current Flask application previously ran like this:
+
+Flask Application
+       ↓
+Docker Container
+       ↓
+Kubernetes Pod
+
+By default, many container images run processes as:
+
+UID 0 = root
+
+That is risky.
+
+Why is root inside a container dangerous?
+
+Suppose an attacker finds an RCE vulnerability in your Flask application:
+
+Attacker
+   ↓
+Flask RCE
+   ↓
+Command execution inside container
+   ↓
+Who executes the command?
+   ↓
+ROOT ❌
+
+If the container is misconfigured or there is a container escape vulnerability, root privileges can make the impact much worse.
+
+The security principle is:
+
+Even if the application is compromised, the attacker should have the minimum possible privileges.
+
+So we will change:
+
+ROOT
+ ↓
+Application
+
+to:
+
+Non-root user
+     ↓
+Application
+
+
+
+
+Check your Flask app running in Kubernetes
+
+Since your application is deployed in Kubernetes, first:
+If the output is:
+
+uid=0(root) gid=0(root)
+
+❌ Running as root.
+
+If:
+
+uid=1000(appuser) gid=1000(appuser)
+
+✅ Running as non-root.
+
+
+
+Check which user the application process itself is using
+
+This is even more important. Run:
+
+kubectl exec -it <pod-name> -n dev -- ps aux
+
+Look at the first column:
+
+USER       PID
+root         1
+
+❌ Application process is running as root.
+
+Or:
+
+USER       PID
+appuser      1
+
+✅ Application process is running as a non-root user.
+
+kubectl exec -it myapp-my-app-chart-56c7c9c4bd-5kmfl -n dev -- whoami
+
+Security review of your Dockerfile
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN useradd -m appuser
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]
+The important security lines
+RUN useradd -m appuser
+
+Creates a dedicated application user.
+
+Then:
+
+RUN chown -R appuser:appuser /app
+
+Gives that user ownership of your application files.
+
+And most importantly:
+
+USER appuser
+
+This means:
+
+Container starts
+      ↓
+PID 1 = python app.py
+      ↓
+Running as appuser
+      ↓
+NOT root
+
+
+
+
+
+One important thing: Dockerfile alone is not enough
+
+Even though the Dockerfile says:
+
+USER appuser
+
+Kubernetes can potentially override the image user through securityContext.
+
+For example:
+
+securityContext:
+  runAsUser: 0
+
+would force root.
+
+So for proper Kubernetes container hardening, we should enforce it at both layers:
+
+Dockerfile Security
+        +
+Kubernetes SecurityContext
+        =
+Defense in Depth
+
+
+
+part 2 - Defense in Depth with Kubernetes SecurityContext
+
+Our next practical step
+
+Let's first inspect your current Helm deployment template and add the Kubernetes securityContext correctly.- check security context if  it exists
+
+Run:
+
+cat templates/deployment.yaml
+
+
+
+Step 1 — Add this to values.yaml
+
+Find the existing podSecurityContext and securityContext sections and set them to:
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+What each control does
+Control	             Protection
+runAsNonRoot:             true	Kubernetes refuses to run the container as root
+runAsUser:                 1000	Forces the appuser UID
+allowPrivilegeEscalation:   false	Blocks privilege escalation
+readOnlyRootFilesystem:     true	Prevents writing to the container filesystem
+drop:                         ALL	Removes unnecessary Linux capabilities
+fsGroup:                      1000	Helps ensure mounted volumes have appropriate group permissions
+
+
+
+
+kubectl get pod <pod-name> -n dev -o yaml | grep -A10 "securityContext:"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
