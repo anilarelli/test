@@ -4663,7 +4663,133 @@ kubectl get pod <pod-name> -n dev -o yaml | grep -A10 "securityContext:"
 
 
 
+Step 2: Read-Only Root Filesystem 🔒
 
+Currently, if an attacker compromises your Flask application, they may be able to write files inside the container:
+
+/app
+/tmp
+/root
+/etc
+...
+
+Even though the container is non-root, preventing unnecessary writes reduces what an attacker can do.
+
+We will configure:
+
+readOnlyRootFilesystem: true
+
+But first we need to understand something important.
+
+Why this can break an application
+
+With a read-only root filesystem:
+
+Container filesystem
+│
+├── /app       🔒 Read-only
+├── /etc       🔒 Read-only
+├── /usr       🔒 Read-only
+├── /root      🔒 Read-only
+└── /tmp       🔒 Read-only ❌
+
+Many applications need /tmp for temporary files.
+
+Therefore, the secure approach is:
+
+Read-only root filesystem
+          │
+          ▼
+      Everything 🔒
+          │
+          └──── /tmp specifically writable
+                       │
+                    emptyDir
+Step 2.1 — Add readOnlyRootFilesystem
+
+First modify your securityContext in values.yaml:
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+Don't deploy yet.
+
+Step 2.2 — Add a writable /tmp volume
+
+Your Deployment template already supports:
+
+volumeMounts:
+
+and:
+
+volumes:
+
+So again, we only need to configure values.yaml.
+
+Add:
+
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+
+volumes:
+  - name: tmp
+    emptyDir: {}
+
+Your relevant values.yaml sections should now look like:
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+
+volumes:
+  - name: tmp
+    emptyDir: {}
+Why emptyDir is useful
+
+emptyDir is created when the Pod starts.
+
+Pod starts
+    │
+    ▼
+emptyDir created
+    │
+    ▼
+Mounted at /tmp
+    │
+    ▼
+Application can write temporary files
+
+When the Pod is deleted:
+
+Pod deleted
+    │
+    ▼
+emptyDir deleted
+
+So temporary attacker-created files don't persist in the container filesystem.
+
+grep -n -A8 -B3 "volumeMounts:" values.yaml
+
+grep -n -A8 -B3 "^volumes:" values.yaml
 
 
 
