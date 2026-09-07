@@ -4794,7 +4794,24 @@ grep -n -A8 -B3 "^volumes:" values.yaml
 
 
 
-
+What you have achieved
+                    Kubernetes Pod
+                         │
+                         ▼
+        ┌────────────────────────────────┐
+        │                                │
+        │  Container runs as UID 1000    │
+        │           👤 appuser            │
+        │                                │
+        │  Privilege Escalation ❌        │
+        │                                │
+        │  Linux Capabilities ❌          │
+        │                                │
+        │  Root Filesystem 🔒 Read-only  │
+        │                                │
+        │  /tmp ✍️ Writable (emptyDir)    │
+        │                                │
+        └────────────────────────────────┘
 
 
 
