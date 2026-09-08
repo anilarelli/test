@@ -5247,25 +5247,143 @@ securityContext:
 
 
 
+Then run:
+
+kubectl get pod <NEW-POD-NAME> -n dev \
+-o jsonpath='{.spec.securityContext.seccompProfile}{"\n"}'
+
+Expected output
+{"type":"RuntimeDefault"}
+
+If you see that, Kubernetes has applied the Pod-level Seccomp configuration. ✅
+
+
+
+Step 3 — Check the effective Seccomp mode inside the running container
+
+This is the more interesting verification.
+
+Run:
+
+kubectl exec -it <NEW-POD-NAME> -n dev -- \
+cat /proc/1/status | grep Seccomp
+
+You should see something like:
+
+Seccomp: 2
+Seccomp_filters: 1
+What does Seccomp: 2 mean?
+Seccomp: 0  → Disabled
+Seccomp: 1  → Strict mode
+Seccomp: 2  → Filter mode ✅
+
+So:
+
+Seccomp: 2
+
+means the container process is running with a Seccomp BPF filter.
+
+That is strong evidence that Seccomp is actively enforcing syscall filtering—not just present in the Kubernetes YAML.
 
 
 
 
 
 
+Let's understand exactly what this proves.
+
+1. Seccomp: 2
+Seccomp: 0  → Disabled
+Seccomp: 1  → Strict mode
+Seccomp: 2  → Filter mode
+
+Your result:
+
+Seccomp: 2
+
+means the container process is running with a Seccomp filter.
+
+Conceptually:
+
+Flask / Python process
+        │
+        ▼
+ Makes a syscall
+        │
+        ▼
+ Seccomp BPF Filter  ← ACTIVE ✅
+        │
+        ├── Allowed syscall → Linux Kernel
+        │
+        └── Blocked syscall → Denied ❌
+2. Seccomp_filters: 1
+
+This tells us that one Seccomp filter is attached to the process.
+
+In our case, that filter corresponds to the effective Seccomp policy applied through:
+
+seccompProfile:
+  type: RuntimeDefault
+
+So we have verified both levels:
+
+Kubernetes configuration
+RuntimeDefault configured
+        ↓
+Pod created
+Runtime verification
+/proc/1/status
+        ↓
+Seccomp: 2
+        ↓
+Filter mode ACTIVE ✅
+Docker Hardening Progress
+
+You have now completed:
+
+Docker / Container Hardening
+│
+├── ✅ Non-root container
+│
+├── ✅ runAsNonRoot
+│
+├── ✅ runAsUser: 1000
+│
+├── ✅ allowPrivilegeEscalation: false
+│
+├── ✅ Drop ALL Linux capabilities
+│
+├── ✅ readOnlyRootFilesystem: true
+│
+├── ✅ Writable /tmp using emptyDir
+│
+└── ✅ Seccomp RuntimeDefault
+
+Your current security stack looks like this:
+
+                    APPLICATION
+                         │
+                         ▼
+              Non-root user (UID 1000)
+                         │
+                         ▼
+          Privilege escalation disabled
+                         │
+                         ▼
+           All capabilities dropped
+                         │
+                         ▼
+           RuntimeDefault Seccomp filter
+                         │
+                         ▼
+              Linux Kernel Interface
 
 
 
 
 
 
-
-
-
-
-
-
-
+Next: AppArmor
 
 
 
