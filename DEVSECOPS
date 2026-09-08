@@ -4656,6 +4656,22 @@ drop:                         ALL	Removes unnecessary Linux capabilities
 fsGroup:                      1000	Helps ensure mounted volumes have appropriate group permissions
 
 
+What drop: ALL means
+
+Linux capabilities split some root privileges into smaller permissions, such as permissions related to networking, mounting, changing system settings, etc.
+
+Your container configuration says:
+
+Container process
+       │
+       ▼
+Linux capabilities
+       │
+       ▼
+DROP ALL ❌
+
+So even if the process has a vulnerability, it has fewer kernel-level privileges available.
+
 
 
 kubectl get pod <pod-name> -n dev -o yaml | grep -A10 "securityContext:"
@@ -4818,7 +4834,414 @@ What you have achieved
 
 
 
+Next: Seccomp 🔐
 
+Seccomp from first principles
+1. What is a system call?
+
+Your Flask application runs in user space, but certain actions require the Linux kernel.
+
+For example:
+
+Python / Flask
+      |
+      | open file
+      | create process
+      | create network connection
+      | read/write data
+      v
+ System Call (syscall)
+      v
+ Linux Kernel
+
+Examples of syscalls include:
+
+open()
+read()
+write()
+socket()
+connect()
+clone()
+mount()
+ptrace()
+
+The kernel exposes hundreds of possible system calls.
+
+Your Python application does not necessarily need every syscall available.
+
+Before applying Seccomp, we'll first understand why dropping Linux capabilities is not enough.
+
+A container process still uses the Linux kernel and makes system calls (syscalls):
+
+Flask Application
+       ↓
+Python
+       ↓
+Linux System Calls
+       ↓
+Linux Kernel
+
+An attacker who compromises an application may try to abuse dangerous or unnecessary syscalls.
+
+Seccomp acts as a syscall filter:
+
+Application
+     │
+     ▼
+Allowed syscalls ✅
+     │
+     ▼
+Seccomp filter 🔒
+     │
+     ├── Allowed → Linux Kernel
+     │
+     └── Blocked ❌
+
+
+What Seccomp protects
+
+So far we hardened who the process runs as and what privileges it has:
+
+Non-root          → limits user privileges
+Capabilities      → removes specific kernel privileges
+Read-only FS      → prevents filesystem modification
+
+But the application can still communicate with the Linux kernel using system calls (syscalls):
+
+Flask App
+   ↓
+Python process
+   ↓
+System calls (syscalls)
+   ↓
+Linux Kernel
+
+Seccomp adds another layer:
+
+Application
+     ↓
+Seccomp filter
+     ↓
+Allowed syscalls ✅
+Blocked syscalls ❌
+     ↓
+Linux Kernel
+
+
+
+2. What is Seccomp?
+
+Seccomp = Secure Computing Mode.
+
+It allows Linux to restrict which system calls a process can make.
+
+Think of it like a firewall, but instead of filtering network traffic:
+
+Network Firewall
+----------------
+Application
+     |
+     v
+Network connection request
+     |
+     v
+Firewall
+     |
+     ├── Allow
+     └── Block
+
+Seccomp does something similar for syscalls:
+
+Application
+     |
+     v
+System call request
+     |
+     v
+Seccomp filter
+     |
+     ├── Allow → Linux Kernel
+     └── Deny  → Blocked
+3. Why do we need Seccomp if we already dropped ALL capabilities?
+
+This is an important distinction.
+
+Linux capabilities
+
+Capabilities control privileges.
+
+For example:
+
+CAP_NET_ADMIN
+CAP_SYS_ADMIN
+CAP_SYS_PTRACE
+
+They answer:
+
+"Does this process have permission to perform this privileged operation?"
+
+Seccomp
+
+Seccomp controls which system calls can even be made.
+
+It answers:
+
+"Should this process be allowed to invoke this syscall at all?"
+
+So:
+
+Capabilities = WHAT privileged powers do you have?
+
+Seccomp = WHICH kernel interfaces/syscalls can you use?
+
+They are complementary.
+
+4. What exactly is RuntimeDefault?
+
+This is the important part.
+
+When you configure:
+
+seccompProfile:
+  type: RuntimeDefault
+
+you are telling Kubernetes:
+
+Do not use an unrestricted Seccomp profile. Ask the container runtime to apply its default Seccomp syscall restrictions to this container.
+
+Your environment uses the Docker-based Minikube setup, and the effective runtime profile comes from the runtime/container stack rather than being a custom Kubernetes profile you manually write.
+
+Conceptually:
+
+Kubernetes Pod
+      |
+      | seccompProfile: RuntimeDefault
+      v
+Container Runtime
+      |
+      v
+Runtime's default Seccomp profile
+      |
+      v
+Some syscalls allowed
+Some unnecessary/risky syscalls blocked
+      |
+      v
+Linux Kernel
+5. What does the runtime default profile do?
+
+A runtime default Seccomp profile generally follows this principle:
+
+Allow syscalls commonly needed by normal applications
+                 +
+Block dangerous/unnecessary syscalls
+
+For a normal container:
+
+Python
+Flask
+Networking
+File reading
+File writing
+Memory allocation
+Process execution
+
+→ Common required operations remain available.
+
+But the profile restricts certain system calls that are unnecessary or dangerous for ordinary containers.
+
+This reduces the attack surface between your container and the Linux kernel.
+
+6. Why not use a custom Seccomp profile?
+
+You can create a custom profile like:
+
+Python application
+       ↓
+Only explicitly required syscalls
+       ↓
+Everything else blocked
+
+But this requires knowing exactly which syscalls your application and its dependencies need.
+
+For example:
+
+Flask
+Python interpreter
+glibc
+OpenSSL
+DNS libraries
+Container runtime
+
+may collectively require many syscalls.
+
+If you block one incorrectly:
+
+Application starts
+       ↓
+Makes required syscall
+       ↓
+Seccomp blocks it ❌
+       ↓
+Application crashes
+
+Therefore, for most Kubernetes workloads, a good progression is:
+
+Unconfined
+    ↓
+RuntimeDefault  ← We are here
+    ↓
+Custom Seccomp profile (high-security workloads)
+7. What is the alternative to RuntimeDefault?
+
+Kubernetes has three main modes you should understand.
+
+A. Unconfined
+seccompProfile:
+  type: Unconfined
+Container
+    ↓
+Any syscall allowed
+    ↓
+Kernel
+
+❌ Least restrictive.
+
+B. RuntimeDefault ✅
+seccompProfile:
+  type: RuntimeDefault
+Container
+    ↓
+Container runtime's default syscall filter
+    ↓
+Kernel
+
+Good general-purpose security baseline.
+
+C. Localhost
+seccompProfile:
+  type: Localhost
+  localhostProfile: profiles/myprofile.json
+
+This means:
+
+Container
+    ↓
+Your custom Seccomp profile
+    ↓
+Only configured syscall rules
+    ↓
+Kernel
+
+This gives more control but requires careful testing.
+
+8. Why we're using RuntimeDefault for your Flask application
+
+Your application is:
+
+Flask
+Python 3.12
+Docker container
+Kubernetes
+
+We want a realistic hardening baseline without breaking the application.
+
+So our security layers now become:
+
+                    Flask Application
+                           │
+                           ▼
+                 Non-root user
+                           │
+                           ▼
+               No privilege escalation
+                           │
+                           ▼
+             Drop ALL capabilities
+                           │
+                           ▼
+             Read-only root filesystem
+                           │
+                           ▼
+                   Seccomp
+                           │
+                           ▼
+                 Linux Kernel
+
+RuntimeDefault is the correct next step because it provides a tested, runtime-maintained syscall restriction baseline.
+
+The key thing I want you to remember
+Docker USER appuser
+        ↓
+Controls WHO the process is
+
+Linux Capabilities
+        ↓
+Controls WHICH privileged powers it has
+
+Seccomp
+        ↓
+Controls WHICH syscalls it can use
+
+Read-only filesystem
+        ↓
+Controls WHERE it can write
+
+Now apply:
+
+podSecurityContext:
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+
+
+
+
+Step 1 — Use Kubernetes RuntimeDefault
+
+For our application, use the recommended runtime-provided default Seccomp profile:
+
+seccompProfile:
+  type: RuntimeDefault
+
+Since your Helm template already has:
+
+{{- with .Values.podSecurityContext }}
+securityContext:
+  {{- toYaml . | nindent 8 }}
+{{- end }}
+
+add Seccomp to podSecurityContext in values.yaml.
+
+Change this
+podSecurityContext:
+  fsGroup: 1000
+To this
+podSecurityContext:
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+
+
+
+Step 2 — Validate Helm locally
+
+From your Helm chart directory:
+
+helm template myapp .
+
+If there are no YAML/Helm errors, specifically check that Seccomp is rendered:
+
+helm template myapp . | grep -A5 -B2 "seccompProfile"
+
+You should see something similar to:
+
+securityContext:
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 
 
