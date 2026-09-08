@@ -5380,7 +5380,79 @@ Your current security stack looks like this:
 
 
 
+1. Test a syscall inside your existing Pod
 
+Your Python image may not have keyctl or strace, especially because you're using:
+
+python:3.12-slim
+
+So instead of installing tools, we can use Python itself, because your container already has Python.
+
+Run this against your Flask Pod:
+
+kubectl exec -it <POD-NAME> -n dev -- \
+python -c 'import os; print(os.getuid())'
+
+This is just a sanity check that Python execution works.
+
+For a more direct Seccomp test, Python's standard library unfortunately doesn't expose every syscall that Docker's default Seccomp profile blocks. We can invoke a syscall using Python's ctypes.
+
+Test keyctl syscall
+
+First determine the architecture:
+
+kubectl exec -it <POD-NAME> -n dev -- uname -m
+
+If it returns:
+
+x86_64
+
+run:
+
+kubectl exec -it <POD-NAME> -n dev -- \
+python -c '
+import ctypes, os
+libc = ctypes.CDLL(None, use_errno=True)
+r = libc.syscall(250, 0, 0, 0, 0, 0)
+e = ctypes.get_errno()
+print("result:", r)
+print("errno:", e, os.strerror(e))
+'
+
+On x86_64, syscall 250 is keyctl.
+
+With your Docker RuntimeDefault Seccomp profile, you should expect something like:
+
+result: -1
+errno: 1 Operation not permitted
+Why this is a useful test
+
+Your application process:
+
+Python
+   ↓
+ctypes
+   ↓
+keyctl syscall (250)
+   ↓
+Seccomp RuntimeDefault
+   ↓
+BLOCKED ❌
+
+This tests from inside your actual application container.
+
+Important caution
+
+Your current Pod also has:
+
+runAsNonRoot
+drop: ALL capabilities
+allowPrivilegeEscalation: false
+
+For this particular test, Operation not permitted can theoretically also be influenced by kernel permissions. So:
+
+Seccomp: 2 = definitive proof a Seccomp filter is active.
+keyctl → EPERM = practical evidence of a restricted syscall, but by itself isn't perfect attribution.
 
 
 Next: AppArmor
