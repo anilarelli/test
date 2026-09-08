@@ -31,6 +31,79 @@ Think of DevSecOps as a pyramid:
 
 secure the pipeline → secure containers → secure Kubernetes → secure runtime → secure supply chain → then secure cloud infrastructure.
 
+
+Stage 0 — Foundation                     ✅
+│
+├── Docker                              ✅
+├── Jenkins                             ✅
+├── Kubernetes                          ✅
+├── Helm                                ✅
+├── ArgoCD                              ✅
+├── Prometheus                          ✅
+└── Grafana                             ✅
+
+Stage 1 — Secure CI/CD
+│
+├── Gitleaks                            ✅
+├── SonarQube                           🔄 Integration pending
+└── Trivy Filesystem Scan               ⏳
+
+Stage 2 — Container Security
+│
+├── 4. Docker Hardening                 ✅
+├── 5. Trivy Image Scan                 ⬅️ NEXT
+└── 6. SBOM with Syft                   ⏳
+
+Stage 3 — Kubernetes Security
+│
+├── 7. RBAC                             ⏳
+├── 8. Network Policies                 ⏳
+├── 9. kube-bench                       ⏳
+└── 10. kube-hunter                     ⏳
+
+Stage 4 — Runtime Security
+│
+└── 11. Falco                           ⏳
+
+Stage 5 — DAST
+│
+└── 12. OWASP ZAP                       ⏳
+
+Stage 6 — Monitoring
+│
+├── 13. Prometheus Alerting             ⏳
+└── 14. Loki                            ⏳
+
+Stage 7 — Secrets
+│
+└── 15. HashiCorp Vault                 ⏳
+
+Stage 8 — Supply Chain
+│
+├── 16. Syft / SBOM                     ⏳
+└── 17. Cosign                          ⏳
+
+Stage 9 — Policy as Code
+│
+├── 18. Kyverno                         ⏳
+└── 19. OPA Gatekeeper                  ⏳
+
+Stage 10 — Cloud Security
+│
+├── AWS IAM                             ⏳
+├── VPC                                 ⏳
+├── CloudTrail                          ⏳
+├── Security Groups                     ⏳
+├── AWS Config                          ⏳
+├── EKS                                 ⏳
+├── IRSA                                ⏳
+├── GuardDuty                           ⏳
+├── Inspector                           ⏳
+└── Security Hub                        ⏳
+
+
+
+
 🟢 Stage 0 — Infrastructure & DevSecOps Foundation ✅
 
 You have already built the foundation.
