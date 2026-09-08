@@ -5455,13 +5455,151 @@ Seccomp: 2 = definitive proof a Seccomp filter is active.
 keyctl → EPERM = practical evidence of a restricted syscall, but by itself isn't perfect attribution.
 
 
+
+
+Yes. Since you have ~2,000 bad Pods, don't delete them one-by-one.
+
+The important thing is to stop their controller first; otherwise Kubernetes may recreate them.
+
+Step 1 — Scale the bad ReplicaSet to zero
+
+First see the ReplicaSets:
+
+kubectl get rs -n dev
+
+The bad Pods all belong to:
+
+myapp-my-app-chart-5d97c8b6dc
+
+Scale that ReplicaSet to zero:
+
+kubectl scale rs myapp-my-app-chart-5d97c8b6dc -n dev --replicas=0
+Step 2 — Delete all Pods from the bad ReplicaSet using the pod-template hash
+
+Your bad Pods have:
+
+pod-template-hash=5d97c8b6dc
+
+Delete them all in one command:
+
+kubectl delete pods -n dev \
+  -l pod-template-hash=5d97c8b6dc \
+  --force --grace-period=0
+
+This is the safest approach because it targets only the broken AppArmor ReplicaSet.
+
+Your healthy Pod:
+
+myapp-my-app-chart-5f8fdf8649-pj8r7   1/1 Running
+
+has a different ReplicaSet hash and will not be selected.
+
+Step 3 — Check how many remain
+kubectl get pods -n dev --no-headers | wc -l
+
+Then:
+
+kubectl get pods -n dev
+
+
 Next: AppArmor
 
+AppArmor — first principles
+
+You now have Seccomp:
+
+Application
+     ↓
+Allowed / blocked SYSCALLS
+     ↓
+Linux Kernel
+
+AppArmor solves a different problem.
+
+Imagine an attacker compromises your Flask application and gains code execution inside the container.
+
+They may try:
+
+Read /etc/shadow
+Write to sensitive files
+Access SSH keys
+Access certain directories
+Execute restricted programs
+
+Traditional Linux permissions may not be enough as an additional defense layer.
+
+AppArmor applies a mandatory policy to a process.
+
+Conceptually:
+
+Application Process
+        │
+        ▼
+   AppArmor Profile
+        │
+        ├── Can access /app/**        ✅
+        ├── Can write /tmp/**         ✅
+        ├── Can access sensitive path ❌
+        └── Other restricted actions  ❌
+
+Kubernetes describes AppArmor as using program profiles to restrict individual programs, while Seccomp filters system calls.
+
+Seccomp vs AppArmor
+
+This distinction is extremely important:
+
+Security Layer	Controls
+Non-root	Who the process runs as
+Capabilities	Which privileged kernel powers it has
+allowPrivilegeEscalation	Whether it can gain additional privileges
+Read-only filesystem	Where it can write
+Seccomp	Which syscalls it can make
+AppArmor	Which resources/actions the process is allowed to access
+
+They provide defense in depth:
+
+                    Flask Application
+                           │
+                           ▼
+                     AppArmor
+                 Resource restrictions
+                           │
+                           ▼
+                     Seccomp
+                  Syscall filtering
+                           │
+                           ▼
+                     Linux Kernel
 
 
 
+Add AppArmor to your Helm chart
 
+We will add this at the container level, alongside your existing container hardening settings.
 
+Your current securityContext in values.yaml should look approximately like:
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+Change it to:
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+  appArmorProfile:
+    type: RuntimeDefault
 
 
 
