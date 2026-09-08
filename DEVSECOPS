@@ -1,5 +1,4 @@
 
-
 If your goal is to become a DevSecOps Engineer, then Kubernetes alone is not enough anymore.
 
 Most companies today want:
@@ -16,21 +15,674 @@ Monitoring
 
 Think of DevSecOps as a pyramid:
 
-                 Cloud Security (AWS/EKS)
-                        ▲
-                 Kubernetes Security
-                        ▲
-               Container Security
-                        ▲
-                Application Security
-                        ▲
-                   CI/CD Security
-                        ▲
-                 Linux + Docker
+🗺️ Complete Learning Path
+                 ☁️ Cloud Security (AWS / EKS)
+                           ▲
+                    ☸️ Kubernetes Security
+                           ▲
+                    🐳 Container Security
+                           ▲
+                    🔐 Application Security
+                           ▲
+                     🔄 CI/CD Security
+                           ▲
+                     🐧 Linux + Docker
 
 
 secure the pipeline → secure containers → secure Kubernetes → secure runtime → secure supply chain → then secure cloud infrastructure.
 
+🟢 Stage 0 — Infrastructure & DevSecOps Foundation ✅
+
+You have already built the foundation.
+
+Completed
+✅ Linux
+✅ Docker
+✅ Jenkins
+✅ Kubernetes
+✅ Helm
+✅ ArgoCD
+✅ Prometheus
+✅ Grafana
+
+Your working architecture is roughly:
+
+Developer
+   │
+   ▼
+GitHub
+   │
+   ▼
+Jenkins
+   │
+   ├── Build Docker Image
+   │
+   └── Security Scanning
+          │
+          ▼
+Docker Registry
+          │
+          ▼
+ArgoCD
+          │
+          ▼
+Kubernetes / Minikube
+          │
+          ├── Prometheus
+          │
+          └── Grafana
+
+🟡 Stage 1 — Secure the CI/CD Pipeline
+1️⃣ Gitleaks ✅
+
+Purpose:
+
+Prevent secrets from entering Git repositories
+
+Detect things such as:
+
+API keys
+Passwords
+Tokens
+Private keys
+AWS credentials
+
+Pipeline concept:
+
+Developer
+   │
+   ▼
+Git Push
+   │
+   ▼
+Gitleaks 🔍
+   │
+   ├── Secret found ❌ Stop pipeline
+   │
+   └── No secret ✅ Continue
+
+2️⃣ SonarQube
+
+Purpose:
+
+Analyze source code quality and security issues.
+
+It can identify:
+
+Bugs
+Code smells
+Security vulnerabilities
+Security hotspots
+Duplicated code
+
+Pipeline:
+
+Source Code
+    │
+    ▼
+SonarQube
+    │
+    ├── Quality Gate Failed ❌
+    │
+    └── Quality Gate Passed ✅
+
+You have already deployed and accessed SonarQube, but we need to finish integrating it into Jenkins.
+
+3️⃣ Trivy Filesystem Scan
+
+Purpose:
+
+Scan the repository/filesystem before building the image.
+
+Example concept:
+
+Source Code Repository
+        │
+        ▼
+Trivy fs
+        │
+        ├── Dependency vulnerabilities
+        ├── Misconfigurations
+        └── Secrets (depending on configuration)
+
+So Stage 1 is:
+
+Gitleaks                 ✅
+SonarQube                🔄
+Trivy Filesystem Scan    ⏳
+🐳 Stage 2 — Secure Containers
+This is where we currently are.
+
+Stage 2 has three major sections:
+
+4️⃣ Docker Hardening
+5️⃣ Trivy Image Scanning
+6️⃣ SBOM with Syft
+
+4️⃣ Docker Hardening ✅
+
+You just completed this.
+
+We hardened your application at multiple layers.
+
+Dockerfile security
+❌ Default container → often runs as root
+
+✅ Your container:
+
+USER appuser
+
+Verified:
+
+uid=1000(appuser)
+Kubernetes Security Context
+
+You implemented:
+
+Non-root
+runAsNonRoot: true
+runAsUser: 1000
+No privilege escalation
+allowPrivilegeEscalation: false
+Drop Linux capabilities
+capabilities:
+  drop:
+    - ALL
+Read-only filesystem
+readOnlyRootFilesystem: true
+Controlled writable directory
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+
+volumes:
+  - name: tmp
+    emptyDir: {}
+Seccomp
+seccompProfile:
+  type: RuntimeDefault
+
+You verified at runtime:
+
+Seccomp: 2
+Seccomp_filters: 1
+AppArmor ⚠️
+
+We attempted:
+
+appArmorProfile:
+  type: RuntimeDefault
+
+But your Docker-driver Minikube node rejected it:
+
+Cannot enforce AppArmor:
+AppArmor is not enabled on the host
+
+So we learned an important environment limitation and removed it.
+
+Docker Hardening status
+Non-root container              ✅
+runAsNonRoot                    ✅
+No privilege escalation         ✅
+Drop ALL capabilities           ✅
+Read-only root filesystem       ✅
+Controlled writable storage     ✅
+Seccomp RuntimeDefault          ✅ Verified
+AppArmor                        ⚠️ Lab environment limitation
+🔴 5️⃣ Trivy Image Scan ← NEXT
+
+This is our next step.
+
+What is the difference between Trivy Filesystem Scan and Image Scan?
+Trivy Filesystem Scan
+
+Git Repository
+     │
+     ▼
+Source code + dependencies
+
+Versus:
+
+Trivy Image Scan
+
+Docker Image
+     │
+     ├── Base OS packages
+     ├── Application dependencies
+     ├── Installed libraries
+     └── Image configuration
+
+Your image:
+
+anilarelli/my-app:jenkins-63
+
+We will scan it.
+
+Conceptually:
+
+Docker Image
+     │
+     ▼
+Trivy
+     │
+     ├── CRITICAL vulnerabilities
+     ├── HIGH vulnerabilities
+     ├── MEDIUM vulnerabilities
+     └── LOW vulnerabilities
+
+Then we will integrate the scan into Jenkins:
+
+Git Push
+   │
+   ▼
+Jenkins
+   │
+   ├── Gitleaks
+   │
+   ├── SonarQube
+   │
+   ├── Trivy Filesystem Scan
+   │
+   ├── Build Docker Image
+   │
+   ├── Trivy Image Scan  ← Stage 2
+   │
+   └── Push Image
+
+Eventually, we can enforce:
+
+CRITICAL vulnerability found
+          │
+          ▼
+Pipeline FAIL ❌
+
+That is an important real DevSecOps control.
+
+📦 6️⃣ SBOM — Syft
+
+SBOM means:
+
+Software Bill of Materials
+
+Think of it as an ingredients list for software.
+
+Example:
+
+Docker Image
+     │
+     ▼
+SBOM
+     │
+     ├── Python 3.12
+     ├── Flask
+     ├── Werkzeug
+     ├── Jinja2
+     ├── Linux packages
+     └── Other dependencies
+
+Syft generates this inventory.
+
+Example flow:
+
+Docker Image
+     │
+     ▼
+Syft
+     │
+     ▼
+SBOM
+     │
+     ├── Package name
+     ├── Version
+     ├── License
+     └── Dependency information
+
+Why this is important:
+
+Imagine six months later:
+
+Critical vulnerability discovered
+          │
+          ▼
+Which applications contain this package?
+          │
+          ▼
+SBOM tells us
+
+This is fundamental to modern software supply-chain security.
+
+☸️ Stage 3 — Kubernetes Security
+
+After Stage 2:
+
+7️⃣ RBAC
+
+Learn:
+
+Authentication
+       vs
+Authorization
+
+Kubernetes permissions:
+
+User / ServiceAccount
+          │
+          ▼
+Role / ClusterRole
+          │
+          ▼
+RoleBinding / ClusterRoleBinding
+          │
+          ▼
+Allowed actions
+
+Example:
+
+Can this Pod read Secrets?
+
+YES / NO
+
+You will learn:
+
+ServiceAccounts
+Roles
+ClusterRoles
+RoleBindings
+ClusterRoleBindings
+Least privilege
+Privilege escalation risks
+8️⃣ Network Policies
+
+Control Pod-to-Pod traffic.
+
+Without NetworkPolicy:
+
+Pod A ─────────► Pod B
+Pod A ─────────► Database
+Pod C ─────────► Pod B
+
+With NetworkPolicy:
+
+Frontend
+   │
+   └────► Backend
+
+Backend
+   │
+   └────► Database
+
+❌ Frontend → Database
+❌ Random Pod → Backend
+
+Very important for Kubernetes microsegmentation.
+
+9️⃣ kube-bench
+
+Checks Kubernetes against CIS benchmarks.
+
+Kubernetes Cluster
+       │
+       ▼
+kube-bench
+       │
+       ▼
+CIS Benchmark
+       │
+       ├── PASS
+       ├── FAIL
+       └── WARNING
+
+We will understand the failures rather than blindly fixing them.
+
+🔟 kube-hunter
+
+Kubernetes penetration-testing/security assessment tool.
+
+It searches for:
+
+Exposed services
+Open ports
+Misconfigurations
+Cluster attack paths
+
+This connects strongly with your penetration-testing background.
+
+🚨 Stage 4 — Runtime Security
+1️⃣1️⃣ Falco
+
+This is one of the most interesting parts.
+
+Trivy scans before deployment.
+
+Falco monitors while the container is running.
+
+Container Running
+        │
+        ▼
+Falco
+        │
+        ├── Shell spawned?
+        ├── Sensitive file accessed?
+        ├── Unexpected process?
+        ├── Privilege escalation attempt?
+        └── Suspicious activity?
+
+Example:
+
+kubectl exec ...
+
+or an attacker getting a shell:
+
+/bin/sh
+
+Falco can detect suspicious runtime behavior.
+
+🎯 Stage 5 — DAST
+1️⃣2️⃣ OWASP ZAP
+
+Dynamic Application Security Testing.
+
+Running Application
+        │
+        ▼
+OWASP ZAP
+        │
+        ├── XSS
+        ├── SQL Injection
+        ├── Security Headers
+        ├── Cookies
+        └── Other web vulnerabilities
+
+This fits directly with your AppSec/Web Penetration Testing background.
+
+📊 Stage 6 — Observability + Security Monitoring
+1️⃣3️⃣ Prometheus Alerting
+
+You already have Prometheus.
+
+Next we learn alerts.
+
+Example:
+
+CPU > threshold
+       │
+       ▼
+Prometheus Alert
+
+Security-related monitoring can include:
+
+Pod restarts
+Unexpected resource spikes
+Failed containers
+Availability anomalies
+1️⃣4️⃣ Loki
+
+Centralized logging.
+
+Application Pods
+       │
+       ▼
+Logs
+       │
+       ▼
+Loki
+       │
+       ▼
+Grafana
+
+Eventually:
+
+Metrics → Prometheus
+Logs    → Loki
+Security Events → Falco
+Visualization → Grafana
+🔐 Stage 7 — Secrets Management
+1️⃣5️⃣ HashiCorp Vault
+
+Instead of:
+
+password: MyPassword123
+
+or:
+
+Secrets directly stored in Git ❌
+
+Use:
+
+Application
+      │
+      ▼
+Vault
+      │
+      ▼
+Dynamic / controlled secrets
+
+Learn:
+
+Secret storage
+Authentication
+Secret injection
+Kubernetes integration
+Secret rotation
+🔗 Stage 8 — Supply Chain Security
+1️⃣6️⃣ Syft
+
+Generate SBOM.
+
+Image → Package Inventory
+1️⃣7️⃣ Cosign
+
+Sign container images.
+
+Build Image
+     │
+     ▼
+Sign with Cosign
+     │
+     ▼
+Registry
+     │
+     ▼
+Kubernetes verifies image
+
+Concept:
+
+Unsigned / untrusted image ❌
+
+Signed trusted image ✅
+🛡️ Stage 9 — Policy as Code
+1️⃣8️⃣ Kyverno
+
+Automatically enforce Kubernetes security policies.
+
+Example:
+
+Pod requests privileged=true
+             │
+             ▼
+Kyverno
+             │
+             ▼
+BLOCK ❌
+
+Rules such as:
+
+Require non-root
+Require resource limits
+Block privileged containers
+Require approved registries
+Require read-only root filesystem
+
+This is where your Docker hardening becomes enforceable automatically.
+
+1️⃣9️⃣ OPA Gatekeeper
+
+Another policy engine.
+
+Concept:
+
+Developer submits Kubernetes YAML
+             │
+             ▼
+OPA / Gatekeeper
+             │
+             ├── Policy compliant → Allow ✅
+             │
+             └── Policy violation → Reject ❌
+☁️ Stage 10 — Cloud Security
+
+Only after we complete the above.
+
+2️⃣0️⃣ AWS IAM
+Users
+Roles
+Policies
+Least Privilege
+2️⃣1️⃣ VPC Security
+Public/private subnets
+Route tables
+Security groups
+Network ACLs
+2️⃣2️⃣ CloudTrail
+AWS API Activity
+        │
+        ▼
+Audit Logs
+2️⃣3️⃣ AWS Config
+
+Checks configuration compliance.
+
+2️⃣4️⃣ EKS
+
+Move from:
+
+Minikube
+
+to:
+
+Amazon EKS
+2️⃣5️⃣ IRSA
+
+IAM Roles for Service Accounts.
+
+Kubernetes ServiceAccount
+           │
+           ▼
+AWS IAM Role
+           │
+           ▼
+AWS permissions
+2️⃣6️⃣ GuardDuty
+
+Threat detection.
+
+2️⃣7️⃣ Inspector
+
+Vulnerability management.
+
+2️⃣8️⃣ Security Hub
+
+Centralized security findings.
 
 
 ### logs in real time
@@ -5606,7 +6258,74 @@ securityContext:
 
 
 
+Stage 0 — Foundation                     ✅
+│
+├── Docker                              ✅
+├── Jenkins                             ✅
+├── Kubernetes                          ✅
+├── Helm                                ✅
+├── ArgoCD                              ✅
+├── Prometheus                          ✅
+└── Grafana                             ✅
 
+Stage 1 — Secure CI/CD
+│
+├── Gitleaks                            ✅
+├── SonarQube                           🔄 Integration pending
+└── Trivy Filesystem Scan               ⏳
+
+Stage 2 — Container Security
+│
+├── 4. Docker Hardening                 ✅
+├── 5. Trivy Image Scan                 ⬅️ NEXT
+└── 6. SBOM with Syft                   ⏳
+
+Stage 3 — Kubernetes Security
+│
+├── 7. RBAC                             ⏳
+├── 8. Network Policies                 ⏳
+├── 9. kube-bench                       ⏳
+└── 10. kube-hunter                     ⏳
+
+Stage 4 — Runtime Security
+│
+└── 11. Falco                           ⏳
+
+Stage 5 — DAST
+│
+└── 12. OWASP ZAP                       ⏳
+
+Stage 6 — Monitoring
+│
+├── 13. Prometheus Alerting             ⏳
+└── 14. Loki                            ⏳
+
+Stage 7 — Secrets
+│
+└── 15. HashiCorp Vault                 ⏳
+
+Stage 8 — Supply Chain
+│
+├── 16. Syft / SBOM                     ⏳
+└── 17. Cosign                          ⏳
+
+Stage 9 — Policy as Code
+│
+├── 18. Kyverno                         ⏳
+└── 19. OPA Gatekeeper                  ⏳
+
+Stage 10 — Cloud Security
+│
+├── AWS IAM                             ⏳
+├── VPC                                 ⏳
+├── CloudTrail                          ⏳
+├── Security Groups                     ⏳
+├── AWS Config                          ⏳
+├── EKS                                 ⏳
+├── IRSA                                ⏳
+├── GuardDuty                           ⏳
+├── Inspector                           ⏳
+└── Security Hub                        ⏳
 
 
 
