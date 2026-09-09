@@ -6402,6 +6402,86 @@ Stage 10 — Cloud Security
 
 
 
+We continue with Stage 2 → Step 5: Trivy Image Scanning. 🐳🔍
+
+We will first scan manually, understand the results, then integrate it into Jenkins.
+
+Step 5 — Trivy Image Scan
+What we are scanning
+
+Your deployment uses an image similar to:
+
+anilarelli/my-app:jenkins-63
+
+The security flow will be:
+
+Source Code
+    │
+    ▼
+Build Docker Image
+    │
+    ▼
+Trivy Image Scan 🔍  ← WE ARE HERE
+    │
+    ├── CRITICAL vulnerabilities
+    ├── HIGH vulnerabilities
+    ├── OS packages
+    └── Application dependencies
+    │
+    ▼
+Push only acceptable image
+Step 1 — Check whether Trivy is installed
+
+On your Kali/Ubuntu DevSecOps machine, run:
+
+trivy --version
+
+
+
+Step 2 — Check which image is currently deployed
+
+Once Trivy is confirmed, run:
+
+kubectl get deployment myapp-my-app-chart -n dev \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+
+This confirms the exact image Kubernetes is currently running.
+
+Then we'll scan that exact image.
+
+The scan we'll run next
+trivy image --severity HIGH,CRITICAL <YOUR-IMAGE>
+
+
+
+
+Step 2 — Scan the Docker image
+
+Run:
+
+trivy image --severity HIGH,CRITICAL anilarelli/my-app:jenkins-63
+
+The first scan may take some time because Trivy may download/update its vulnerability database.
+
+What you'll see
+
+Trivy will inspect multiple layers:
+
+anilarelli/my-app:jenkins-63
+        │
+        ├── Base image
+        │     └── python:3.12-slim
+        │
+        ├── OS packages
+        │
+        └── Python dependencies
+              │
+              └── requirements.txt packages
+
+
+
+
+
 
 
 
