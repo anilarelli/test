@@ -6481,6 +6481,43 @@ anilarelli/my-app:jenkins-63
 
 
 
+Your Trivy stage
+
+Keep it as:
+
+stage('Trivy Image Scan') {
+    steps {
+        sh '''
+        trivy image \
+          --timeout 30m \
+          --severity CRITICAL,HIGH,MEDIUM \
+          --exit-code 0 \
+          ${IMAGE_NAME}:${IMAGE_TAG}
+        '''
+    }
+}
+What each option means
+trivy image
+
+→ Scan a container image.
+
+--timeout 30m
+
+→ Allow up to 30 minutes for Trivy. This avoids timeout problems during database downloads/scanning.
+
+--severity CRITICAL,HIGH,MEDIUM
+
+→ Show only these severity levels.
+
+--exit-code 0
+
+→ Even if vulnerabilities are found, return success so Jenkins continues.
+
+${IMAGE_NAME}:${IMAGE_TAG}
+
+During Jenkins execution this becomes something like:
+
+anilarelli/my-app:jenkins-64
 
 
 
@@ -6488,8 +6525,39 @@ anilarelli/my-app:jenkins-63
 
 
 
+Now run the Jenkins pipeline
 
+Commit the Jenkinsfile if you changed anything:
 
+git add Jenkinsfile
+git commit -m "Add Trivy image security scan"
+git push
+
+Then trigger the Jenkins job.
+
+We expect:
+
+Checkout                 ✅
+Build Image              ✅
+Trivy Image Scan         ⚠️ Findings reported
+Login Docker Hub         ✅
+Push Image               ✅
+Deploy to Kubernetes     ✅
+What you have accomplished after this succeeds
+
+Your pipeline will now have an actual container-image security scanning gate:
+
+Source Code
+    ↓
+Build Docker Image
+    ↓
+Trivy scans FINAL image 🔍
+    ↓
+Vulnerabilities visible
+    ↓
+Image pushed
+    ↓
+Kubernetes deployment
 
 
 
