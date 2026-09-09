@@ -6685,7 +6685,48 @@ Then verify:
 syft version
 
 
+Generate your first SBOM
 
+First, let's scan the same image we used with Trivy.
+
+Run:
+
+syft anilarelli/my-app:jenkins-63
+
+This will generate a package inventory directly in the terminal.
+
+
+Now we move from simply viewing the SBOM in the terminal to creating a standard SBOM file.
+
+Step 2 — Generate a CycloneDX SBOM file
+
+Run:
+
+syft anilarelli/my-app:jenkins-63 \
+  -o cyclonedx-json=sbom.json
+
+Now check that the file exists:
+
+ls -lh sbom.json
+
+You can inspect the beginning:
+
+head -20 sbom.json
+What we just created
+Docker Image
+     │
+     ▼
+Syft
+     │
+     ▼
+sbom.json
+     │
+     ├── Package names
+     ├── Versions
+     ├── Dependencies
+     └── Component metadata
+
+CycloneDX is a widely used SBOM format. Instead of only seeing inventory in the terminal, you now have a machine-readable artifact that can be stored with the build.
 
 
 
