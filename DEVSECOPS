@@ -6561,5 +6561,133 @@ Kubernetes deployment
 
 
 
+Stage 2 → Step 6: SBOM with Syft 📦
+
+This is our next topic.
+
+What is an SBOM?
+
+SBOM = Software Bill of Materials.
+
+Think of it like the ingredients label on a food product.
+
+Food Product
+   ↓
+Ingredients list
+
+For software:
+
+Docker Image
+   ↓
+SBOM
+   ↓
+List of all software components
+
+For your image:
+
+anilarelli/my-app:jenkins-<BUILD_NUMBER>
+
+Syft can identify things such as:
+
+Operating System packages
+        │
+        ├── Python runtime
+        ├── Debian packages
+        └── System libraries
+
+Application dependencies
+        │
+        ├── Flask
+        ├── Werkzeug
+        ├── Jinja2
+        └── Other Python packages
+Why do we need SBOM if we already have Trivy?
+
+This is very important.
+
+Trivy asks:
+
+What vulnerabilities are present?
+
+Image
+  ↓
+Trivy
+  ↓
+Vulnerabilities
+Syft asks:
+
+What software components exist inside this image?
+
+Image
+  ↓
+Syft
+  ↓
+Software inventory
+
+So they solve different problems.
+
+SBOM
+│
+├── Package A version 1.2
+├── Package B version 3.4
+└── Package C version 5.6
+
+Later...
+
+A new vulnerability is discovered:
+
+CVE discovered in Package B
+          ↓
+Which applications use Package B?
+          ↓
+SBOM helps answer this
+
+This is extremely useful for software supply-chain security.
+
+
+
+
+
+Our goal for this step
+
+First, we will manually generate an SBOM for your Docker image:
+
+anilarelli/my-app:jenkins-<latest-build>
+
+Then we'll:
+
+Understand the SBOM output.
+Generate it in CycloneDX or SPDX format.
+Save the SBOM as a build artifact.
+Integrate Syft into Jenkins.
+
+Your final Stage 2 pipeline will become:
+
+Build Docker Image
+        │
+        ▼
+Trivy Image Scan 🔍
+        │
+        ▼
+Syft SBOM Generation 📦
+        │
+        ▼
+Push Image
+        │
+        ▼
+Deploy to Kubernetes
+
+
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+
+Then verify:
+
+syft version
+
+
+
+
+
+
 
 
