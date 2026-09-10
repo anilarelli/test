@@ -6816,11 +6816,34 @@ Stage 10 — AWS/EKS	⏳
 
 
 
+🔐 Stage 3 — Kubernetes Security
 
 
+Topic 1: RBAC — Role-Based Access Control
 
+Our learning sequence:
 
-
+Authentication
+      ↓
+Authorization
+      ↓
+RBAC
+      ↓
+ServiceAccount
+      ↓
+Role
+      ↓
+RoleBinding
+      ↓
+ClusterRole
+      ↓
+ClusterRoleBinding
+      ↓
+Least Privilege
+      ↓
+kubectl auth can-i
+      ↓
+Real-world security design
 
 
 
