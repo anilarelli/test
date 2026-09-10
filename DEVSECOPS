@@ -6797,7 +6797,19 @@ This gives each build its own SBOM artifact.
 
 
 
-
+Your overall progress
+Stage	Status
+Stage 0 — Foundation	✅ Complete
+Stage 1 — CI/CD Security	🔄 SonarQube integration + Trivy FS pending
+Stage 2 — Container Security	✅ Complete
+Stage 3 — Kubernetes Security	⬅️ Next
+Stage 4 — Runtime Security	⏳
+Stage 5 — DAST	⏳
+Stage 6 — Monitoring	⏳
+Stage 7 — Secrets	⏳
+Stage 8 — Supply Chain	⏳
+Stage 9 — Policy as Code	⏳
+Stage 10 — AWS/EKS	⏳
 
 
 
