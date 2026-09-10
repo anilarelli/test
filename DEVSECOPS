@@ -6730,5 +6730,94 @@ CycloneDX is a widely used SBOM format. Instead of only seeing inventory in the 
 
 
 
+Next: Add Syft to Jenkins
+
+We want every Jenkins build to automatically create an SBOM for the new image built during that build.
+
+Your pipeline should become:
+
+Checkout
+   ↓
+Build Image 🐳
+   ↓
+Trivy Image Scan 🔍
+   ↓
+Generate SBOM 📦
+   ↓
+Archive SBOM in Jenkins
+   ↓
+Login Docker Hub
+   ↓
+Push Image
+   ↓
+Deploy Kubernetes
+Step 1 — Add this stage after Trivy Image Scan
+
+In your Jenkinsfile, add:
+
+stage('Generate SBOM') {
+    steps {
+        sh '''
+        syft ${IMAGE_NAME}:${IMAGE_TAG} \
+          -o cyclonedx-json=sbom-${BUILD_NUMBER}.json
+        '''
+    }
+}
+
+Then immediately after it, add:
+
+stage('Archive SBOM') {
+    steps {
+        archiveArtifacts artifacts: 'sbom-*.json', fingerprint: true
+    }
+}
+
+
+
+Important point
+
+Your manually generated file was:
+
+sbom.json
+
+But Jenkins builds many images:
+
+jenkins-64
+jenkins-65
+jenkins-66
+...
+
+Therefore, we use:
+
+sbom-64.json
+sbom-65.json
+sbom-66.json
+
+This gives each build its own SBOM artifact.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
