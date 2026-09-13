@@ -7013,3 +7013,216 @@ no
 
 This is authorization testing.
 
+
+
+
+
+Now create a Role
+
+Create a file:
+
+nano rbac-role.yaml
+
+Put this inside:
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: dev
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+
+Apply it:
+
+kubectl apply -f rbac-role.yaml
+
+Check:
+
+kubectl get role -n dev
+
+You should see:
+
+NAME         AGE
+pod-reader   ...
+9. Understand the YAML deeply
+
+This:
+
+apiVersion: rbac.authorization.k8s.io/v1
+
+means we're using Kubernetes' RBAC API.
+
+This:
+
+kind: Role
+
+means:
+
+Create a namespace-scoped RBAC Role.
+
+This:
+
+namespace: dev
+
+means this Role exists inside:
+
+dev
+
+Now the important part:
+
+rules:
+
+A Role contains one or more permission rules.
+
+Our rule says:
+
+apiGroups: [""]
+
+The empty API group represents the core API group.
+
+Pods belong to the core API group.
+
+Then:
+
+resources:
+  - pods
+
+We're talking about:
+
+Pods
+
+Then:
+
+verbs:
+  - get
+  - list
+  - watch
+
+We're giving three operations.
+
+get
+
+Retrieve one specific object:
+
+kubectl get pod mypod
+list
+
+Retrieve a collection:
+
+kubectl get pods
+watch
+
+Allow the client to watch for changes to resources.
+
+This is important for Kubernetes controllers.
+
+10. What did we NOT give permission for?
+
+We didn't include:
+
+create
+update
+patch
+delete
+
+Therefore:
+
+get       ✅
+list      ✅
+watch     ✅
+
+create    ❌
+update    ❌
+patch     ❌
+delete    ❌
+
+That's least privilege.
+
+11. But there's one missing piece
+
+Our ServiceAccount doesn't automatically receive the Role.
+
+We need:
+
+RoleBinding
+
+Create:
+
+nano rbac-binding.yaml
+
+Put:
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-reader-binding
+  namespace: dev
+
+subjects:
+  - kind: ServiceAccount
+    name: rbac-demo
+    namespace: dev
+
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+
+Apply:
+
+kubectl apply -f rbac-binding.yaml
+
+Check:
+
+kubectl get rolebinding -n dev
+12. Now test again
+
+Run:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Now:
+
+yes
+
+Test:
+
+kubectl auth can-i list pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Should be:
+
+yes
+
+But:
+
+kubectl auth can-i delete pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Should be:
+
+no
+
+And:
+
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Should be:
+
+no
+
+🎯 This is the core of Kubernetes RBAC.
