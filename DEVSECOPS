@@ -6850,9 +6850,166 @@ Real-world security design
 
 
 
+The four RBAC objects
+
+These four objects are the heart of Kubernetes RBAC:
+
+Role
+RoleBinding
+
+ClusterRole
+ClusterRoleBinding
+
+Don't memorize them yet. Understand the scope.
+
+Role
+
+A Role provides permissions inside one namespace.
+
+Example:
+
+Role
+ namespace: dev
+
+ allowed:
+   get pods
+   list pods
+
+It cannot grant permissions across the entire cluster.
+
+RoleBinding
+
+A RoleBinding connects an identity to a Role.
+
+ServiceAccount
+       │
+       │ RoleBinding
+       ▼
+     Role
+       │
+       ▼
+ get/list pods
+
+Both the Role and binding are namespace-oriented.
+
+ClusterRole
+
+A ClusterRole can define permissions that aren't restricted to one namespace.
+
+For example:
+
+ClusterRole
+   ↓
+nodes
+pods
+deployments
+secrets
+
+ClusterRoles are also commonly used with namespace-scoped resources when you want to reuse the same permission definition across namespaces.
+
+ClusterRoleBinding
+
+A ClusterRoleBinding attaches a ClusterRole at the cluster level.
+
+For example:
+
+ServiceAccount
+      │
+      ▼
+ClusterRoleBinding
+      │
+      ▼
+ClusterRole
+      │
+      ▼
+cluster-wide permissions
+
+This is potentially extremely powerful.
 
 
 
 
 
+Let's build a real RBAC lab
+
+We'll use your existing:
+
+dev
+
+namespace.
+
+First check it:
+
+kubectl get namespace dev
+
+Then inspect existing ServiceAccounts:
+
+kubectl get serviceaccount -n dev
+
+You should see something similar to:
+
+NAME      SECRETS   AGE
+default   0         ...
+
+Depending on your Kubernetes version, token secrets may not appear because modern Kubernetes uses projected ServiceAccount tokens.
+
+6. Create our own ServiceAccount
+
+Create:
+
+kubectl create serviceaccount rbac-demo -n dev
+
+Check it:
+
+kubectl get serviceaccount rbac-demo -n dev
+
+We now have:
+
+User/Application
+       ↓
+rbac-demo ServiceAccount
+
+But currently we haven't intentionally given it useful permissions.
+
+7. Test its permissions
+
+This is one of the most useful Kubernetes security commands:
+
+kubectl auth can-i
+
+Let's ask:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Conceptually we're asking Kubernetes:
+
+"Can the rbac-demo ServiceAccount get Pods in the dev namespace?"
+
+Expected:
+
+no
+
+Now:
+
+kubectl auth can-i list pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Expected:
+
+no
+
+And:
+
+kubectl auth can-i delete pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Expected:
+
+no
+
+This is authorization testing.
 
