@@ -7226,3 +7226,173 @@ Should be:
 no
 
 🎯 This is the core of Kubernetes RBAC.
+
+
+there are two different places where dev appears, and they serve completely different purposes.
+
+Let's break it down.
+
+1. This part:
+system:serviceaccount:dev:rbac-demo
+
+is the identity.
+
+The format for a Kubernetes ServiceAccount identity is:
+
+system:serviceaccount:<namespace>:<serviceaccount-name>
+
+So yours:
+
+system:serviceaccount:dev:rbac-demo
+                       │   │
+                       │   └── ServiceAccount name
+                       └────── Namespace
+
+means:
+
+"The ServiceAccount named rbac-demo that belongs to the dev namespace."
+
+It is telling Kubernetes WHO you're pretending to be.
+
+2. This part:
+-n dev
+
+is the namespace in which you're asking Kubernetes to perform/check the operation.
+
+For example:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+There are therefore two separate questions:
+
+--as
+--as=system:serviceaccount:dev:rbac-demo
+
+means:
+
+WHO is making the request?
+
+Answer:
+
+ServiceAccount rbac-demo
+in namespace dev
+-n dev
+-n dev
+
+means:
+
+Which namespace are we checking the requested resource in?
+
+Answer:
+
+dev
+3. Why does the ServiceAccount itself need dev?
+
+Because ServiceAccounts are namespaced resources.
+
+You can have:
+
+dev/rbac-demo
+test/rbac-demo
+prod/rbac-demo
+
+These are three different ServiceAccounts.
+
+Think of them like:
+
+dev
+ └── rbac-demo
+
+test
+ └── rbac-demo
+
+prod
+ └── rbac-demo
+
+Same name, different namespace = different identity.
+
+Therefore:
+
+system:serviceaccount:dev:rbac-demo
+
+specifically identifies:
+
+dev → rbac-demo
+4. Now the really interesting part
+
+Suppose we run:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n test
+
+Notice:
+
+Identity:
+system:serviceaccount:dev:rbac-demo
+                         ↑
+                       dev
+
+Resource namespace:
+-n test
+   ↑
+  test
+
+We're asking:
+
+"Can the dev/rbac-demo ServiceAccount get Pods in the test namespace?"
+
+That's a perfectly valid question.
+
+If our RoleBinding only grants it access in dev, the answer should be:
+
+no
+
+
+
+RBAC Deep Dive — Part 2
+
+We're going to understand:
+
+1. Role vs ClusterRole
+2. RoleBinding vs ClusterRoleBinding
+3. Namespace scope vs cluster scope
+4. Wildcards and dangerous permissions
+5. Secrets + RBAC
+6. ServiceAccount compromise
+7. Privilege escalation
+8. RBAC attack paths
+9. RBAC auditing
+10. Real-world least-privilege design
+1. Role vs ClusterRole — the critical distinction
+
+You already created:
+
+Role: pod-reader
+Namespace: dev
+
+That means the permission is limited to dev.
+
+Think:
+
+                 Kubernetes Cluster
+        ┌────────────┬────────────┬────────────┐
+        │            │            │            │
+       dev          test         prod         ...
+        │
+        └── Role
+            pod-reader
+
+The Role says:
+
+This permission exists within dev.
+
+It does not mean:
+
+get pods everywhere
+
+It means:
+
+get pods in dev
