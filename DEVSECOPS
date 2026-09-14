@@ -8963,3 +8963,198 @@ So your output is actually teaching us an important RBAC concept:
        Verbs
 
 
+Three RBAC permissions to flag immediately
+
+When reviewing RBAC, these should make you stop and investigate:
+
+escalate
+bind
+impersonate
+
+Let's understand why.
+
+escalate
+
+Normally, Kubernetes prevents an identity from creating/updating a Role with permissions greater than the identity itself possesses.
+
+Conceptually:
+
+Current permissions
+       ↓
+Can I create a role
+with MORE permissions?
+       ↓
+Normally → No
+
+escalate is a special permission related to bypassing that protection.
+
+So:
+
+escalate
+
+is extremely sensitive.
+
+8. bind
+
+Now consider:
+
+RoleBinding
+
+A binding connects:
+
+Identity → Role
+
+If someone has dangerous binding permissions, they may be able to attach identities to roles with greater privileges.
+
+Conceptually:
+
+Low-privilege identity
+        ↓
+bind
+        ↓
+Powerful Role
+        ↓
+Higher privilege
+
+So when auditing an RBAC policy, look for:
+
+bind
+
+especially over powerful Roles/ClusterRoles.
+
+9. impersonate
+
+This one is conceptually different.
+
+Imagine:
+
+Identity A
+
+is allowed to impersonate:
+
+Identity B
+
+Then Kubernetes can evaluate a request using B's identity.
+
+Conceptually:
+
+A
+ ↓
+impersonate B
+ ↓
+authorization evaluated for B
+
+If B is highly privileged, this can become a major security issue.
+
+Therefore:
+
+impersonate users
+impersonate groups
+impersonate serviceaccounts
+
+deserve careful review.
+
+
+
+
+
+
+
+Let's inspect whether our demo has these
+
+Run:
+
+kubectl auth can-i escalate roles \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i bind roles \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i impersonate users \
+  --as=system:serviceaccount:dev:rbac-demo
+
+For our deliberately limited demo account, these should normally be:
+
+no
+no
+no
+
+
+
+
+Now let's inspect the RBAC API itself
+
+Kubernetes RBAC resources live under:
+
+rbac.authorization.k8s.io
+
+Run:
+
+kubectl api-resources | grep -i role
+
+You'll see resources such as:
+
+roles
+rolebindings
+clusterroles
+clusterrolebindings
+
+This command is useful because it lets you discover what Kubernetes exposes through its API.
+
+12. API group → resource → verb
+
+This is another concept you need to internalize.
+
+Our Role:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+
+means:
+
+API group
+    ↓
+core API group
+
+resource
+    ↓
+pods
+
+verbs
+    ↓
+get/list/watch
+
+So RBAC can be thought of as:
+
+WHO
+ ↓
+CAN
+ ↓
+DO WHAT
+ ↓
+TO WHICH RESOURCE
+ ↓
+IN WHICH SCOPE
+
+That's the complete authorization question
+
+
+
+
+
+
+
+
+
