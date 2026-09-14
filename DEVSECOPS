@@ -8243,6 +8243,270 @@ If you understand those four YAML structures, you've basically unlocked the core
 
 
 
+🔥 RBAC Privilege Escalation
+
+The key idea is:
+
+A permission that looks harmless by itself can become dangerous when combined with another permission.
+
+
+
+Why is Pod creation security-sensitive?
+
+Because a Pod isn't merely:
+
+"name: my-pod"
+
+A Pod specification controls many things.
+
+For example:
+
+spec:
+  containers:
+    - image: ...
+      securityContext:
+        ...
+      volumeMounts:
+        ...
+
+Depending on what the cluster permits, Pod configuration can influence:
+
+filesystem access
+Linux capabilities
+host namespace access
+mounted volumes
+ServiceAccounts
+network behavior
+container privileges
+
+So the security question isn't simply:
+
+"Can this identity create Pods?"
+
+It's:
+
+"What kind of Pods can this identity create?"
+
+That's a much better security question.
+
+
+
+
+
+Three special RBAC verbs you must know
+
+There are three permissions that should immediately get your attention during an RBAC review:
+
+escalate
+bind
+impersonate
+
+These are different from normal workload permissions.
+
+9. escalate
+
+Imagine someone has:
+
+Role:
+  get pods
+
+They shouldn't simply be able to modify/create RBAC objects that grant themselves:
+
+cluster-admin
+
+Kubernetes has protections around modifying roles with permissions greater than the caller's own permissions.
+
+The escalate permission is associated with bypassing those normal restrictions.
+
+So when auditing RBAC:
+
+escalate
+
+should be treated as highly sensitive.
+
+10. bind
+
+bind relates to the ability to create or modify bindings to roles.
+
+Conceptually:
+
+RoleBinding
+     ↓
+Role / ClusterRole
+
+Imagine an identity could freely bind itself to powerful roles.
+
+That could become:
+
+low privilege identity
+        ↓
+bind permission
+        ↓
+powerful Role
+        ↓
+high privilege
+
+Therefore:
+
+bind
+
+is another permission that deserves serious scrutiny.
+
+11. impersonate
+
+This one is particularly interesting.
+
+Imagine:
+
+User A
+
+is allowed to impersonate:
+
+User B
+
+Then requests can be evaluated as though they came from B.
+
+Conceptually:
+
+Attacker
+   ↓
+impersonate
+   ↓
+Powerful identity
+   ↓
+Powerful permissions
+
+That's why:
+
+impersonate
+
+is another high-value permission during RBAC audits.
+
+12. Your RBAC security checklist
+
+When you see an RBAC rule, don't just read:
+
+resources:
+  - pods
+
+Read the entire rule:
+
+apiGroups:
+resources:
+verbs:
+resourceNames:
+
+Then ask:
+
+WHO?
+User?
+Group?
+ServiceAccount?
+WHERE?
+Which namespace?
+Cluster-wide?
+WHAT?
+pods?
+secrets?
+deployments?
+roles?
+rolebindings?
+WHAT CAN THEY DO?
+get?
+list?
+create?
+update?
+patch?
+delete?
+bind?
+escalate?
+impersonate?
+
+
+
+
+
+Now let's learn RBAC auditing
+
+Start with:
+
+kubectl get rolebindings -A
+
+-A means:
+
+--all-namespaces
+
+Now:
+
+kubectl get clusterrolebindings
+
+Then:
+
+kubectl get roles -A
+
+And:
+
+kubectl get clusterroles
+
+You're essentially building this picture:
+
+        IDENTITIES
+             ↓
+        BINDINGS
+             ↓
+          ROLES
+             ↓
+       PERMISSIONS
+
+
+
+
+
+A very important real-world rule
+
+If you see:
+
+verbs:
+  - "*"
+
+or:
+
+resources:
+  - "*"
+
+don't automatically conclude:
+
+"Critical vulnerability."
+
+Instead ask:
+
+Who receives it?
+Where?
+Which API groups?
+Which resources?
+Which verbs?
+Why does this identity need it?
+
+For example:
+
+resources:
+  - pods
+
+verbs:
+  - "*"
+
+is broad, but very different from:
+
+apiGroups:
+  - "*"
+
+resources:
+  - "*"
+
+verbs:
+  - "*"
+
+The second is dramatically broader.
 
 
 
@@ -8250,5 +8514,53 @@ If you understand those four YAML structures, you've basically unlocked the core
 
 
 
+Your next hands-on exercise 🔥
+
+Let's make this practical.
+
+Run:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then specifically test these:
+
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo -n dev
+kubectl auth can-i create pods \
+  --as=system:serviceaccount:dev:rbac-demo -n dev
+kubectl auth can-i create deployments \
+  --as=system:serviceaccount:dev:rbac-demo -n dev
+kubectl auth can-i escalate roles \
+  --as=system:serviceaccount:dev:rbac-demo -n dev
+kubectl auth can-i bind roles \
+  --as=system:serviceaccount:dev:rbac-demo -n dev
+kubectl auth can-i impersonate users \
+  --as=system:serviceaccount:dev:rbac-demo -n dev
+
+Don't worry if some return no — that's what we want to see in a least-privilege configuration.
+
+
+
+
+🔥 RBAC Deep Dive — Part 3
+ServiceAccount → API → Privilege Escalation
+
+The mental model we're building is:
+
+Application
+    ↓
+Pod
+    ↓
+ServiceAccount
+    ↓
+Kubernetes API
+    ↓
+RBAC authorization
+    ↓
+Allowed actions
+    ↓
+Potential impact
 
 
