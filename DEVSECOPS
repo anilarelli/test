@@ -9345,14 +9345,275 @@ This is a relatively low-privilege identity.
 
 
 
+2. What would an attacker want?
+
+Suppose an application running as this ServiceAccount is compromised.
+
+The attacker doesn't necessarily care about Pods themselves.
+
+They want to answer:
+
+"What can this identity do to increase my privileges?"
+
+They might investigate:
+
+Can I read Secrets?
+Can I create Pods?
+Can I modify Deployments?
+Can I create RoleBindings?
+Can I modify Roles?
+Can I impersonate another identity?
+
+This is why kubectl auth can-i --list is so useful.
+
+3. First dangerous permission: get secrets
+
+Consider:
+
+resources:
+  - secrets
+
+verbs:
+  - get
+
+The identity can potentially retrieve Secrets that are within its authorized scope.
+
+So:
+
+rbac-demo
+    │
+    ▼
+get secrets
+    │
+    ▼
+potentially sensitive credentials
+
+Examples of information stored in Kubernetes Secrets can include:
+
+database credentials
+API tokens
+TLS material
+registry credentials
+application secrets
+
+The important security principle:
+
+Don't grant Secret access unless the workload actually needs it.
+
+4. Second dangerous permission: create pods
+
+Now consider:
+
+resources:
+  - pods
+
+verbs:
+  - create
+
+This doesn't automatically mean cluster compromise.
+
+Instead ask:
+
+What Pod can this identity create?
+        ↓
+What security controls constrain that Pod?
+        ↓
+What ServiceAccount can it use?
+        ↓
+What volumes can it mount?
+        ↓
+What capabilities are allowed?
+        ↓
+What namespace is it in?
+
+This is why Kubernetes security has multiple layers:
+
+RBAC
+  +
+Pod Security
+  +
+SecurityContext
+  +
+Seccomp
+  +
+NetworkPolicy
+  +
+Admission controls
+
+You have already configured several of those controls in your lab.
+
+5. The dangerous RBAC verbs
+
+Now let's focus on three special verbs:
+
+escalate
+bind
+impersonate
+
+These are particularly important during a Kubernetes security assessment.
+
+6. escalate
+
+Imagine:
+
+Attacker
+   ↓
+has permission to modify Roles
+
+They might try to create a Role containing:
+
+verbs:
+  - "*"
+
+resources:
+  - "*"
+
+That would be an attempt to give themselves much greater privileges.
+
+Kubernetes has a protection mechanism:
+
+An identity generally cannot create/update a Role containing permissions that exceed its own permissions.
+
+The escalate permission is associated with bypassing that protection.
+
+Therefore, if you see:
+
+escalate
+
+during an RBAC review:
+
+🚨 Investigate it immediately.
+
+7. bind
+
+Now imagine an attacker can manipulate RoleBindings.
+
+Remember:
+
+RoleBinding
+      ↓
+Role
+
+A binding connects an identity to permissions.
+
+If an identity can create a binding to a sufficiently powerful Role, the attack path can look conceptually like:
+
+Low privilege identity
+        ↓
+create/modify binding
+        ↓
+bind identity to powerful Role
+        ↓
+higher privileges
+
+The bind permission exists specifically around protections for binding roles.
+
+So:
+
+escalate
+bind
+
+are two RBAC permissions you should know extremely well.
+
+8. impersonate
+
+This is another interesting one.
+
+Suppose:
+
+Identity A
+
+can impersonate:
+
+Identity B
+
+Then Kubernetes can evaluate a request using B's identity.
+
+Conceptually:
+
+Identity A
+    │
+    │ impersonate
+    ▼
+Identity B
+    │
+    ▼
+B's permissions
+
+If B is privileged, this can be extremely dangerous.
+
+Potential targets include:
+
+users
+groups
+serviceaccounts
+
+So when auditing RBAC, search for:
+
+impersonate
 
 
 
 
 
 
+The attack-path mindset
 
+Here's the model I want you to remember:
 
+                Compromised application
+                         │
+                         ▼
+                    ServiceAccount
+                         │
+                         ▼
+                       RBAC
+                         │
+             ┌───────────┼───────────┐
+             ▼           ▼           ▼
+         Secrets       Pods       RBAC objects
+             │           │           │
+             ▼           ▼           ▼
+          secrets     workload     escalation
+          exposure    creation     opportunity
+
+Then ask:
+
+Can these permissions be combined?
+
+For example:
+
+create pods
+     +
+sensitive ServiceAccount access
+     +
+sensitive mounted resources
+
+can produce a very different risk than create pods alone.
+
+13. One of the most important security concepts
+
+Don't report:
+
+"create pods = critical."
+
+Instead report something like:
+
+"ServiceAccount X can create Pods in namespace Y. The security impact depends on the Pod Security/admission restrictions and the identities/resources that the created workload can access."
+
+That's a much more professional security assessment.
+
+Likewise:
+
+Don't report:
+
+"get secrets = cluster takeover."
+
+Instead:
+
+"ServiceAccount X can read Secrets in namespace Y, potentially exposing credentials or other sensitive material stored there."
+
+Then determine whether those credentials provide further access.
 
 
 
