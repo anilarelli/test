@@ -8564,3 +8564,44 @@ Allowed actions
 Potential impact
 
 
+
+
+The most important thing:
+
+RBAC doesn't create the vulnerability by itself. The danger comes from what an identity is authorized to do.
+
+1. First, let's inspect our rbac-demo
+
+Run:
+
+kubectl get serviceaccount rbac-demo -n dev -o yaml
+
+
+
+Why does this matter to AppSec?
+
+Imagine your application has a web vulnerability.
+
+For example:
+
+Application vulnerability
+        ↓
+Attacker gains code execution
+        ↓
+Application is running inside Pod
+        ↓
+Pod has ServiceAccount
+        ↓
+ServiceAccount has Kubernetes permissions
+
+The attacker may then potentially interact with the Kubernetes API using the identity available to the workload.
+
+Therefore:
+
+Application Security
+        +
+Kubernetes Security
+        =
+Cloud-native attack surface
+
+This is why your AppSec background connects very naturally with Kubernetes security.
