@@ -8605,3 +8605,361 @@ Kubernetes Security
 Cloud-native attack surface
 
 This is why your AppSec background connects very naturally with Kubernetes security.
+
+
+
+
+Let's see what permissions our identity actually has
+
+Run:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Don't just look at yes.
+
+Read it as:
+
+RESOURCE → VERBS
+
+For example:
+
+pods → get,list,watch
+secrets → get,list
+
+means:
+
+rbac-demo
+   │
+   ├── pods
+   │     ├── get
+   │     ├── list
+   │     └── watch
+   │
+   └── secrets
+         ├── get
+         └── list
+
+That's the effective permission set.
+
+
+
+
+
+Your output has two different sections
+
+You have:
+
+Resources                                      Non-Resource URLs
+---------------------------------------------------------------
+selfsubjectreviews.authentication.k8s.io       []
+selfsubjectaccessreviews.authorization.k8s.io  []
+selfsubjectrulesreviews.authorization.k8s.io   []
+
+and then:
+
+                                                [/.well-known/...]
+                                                [/api/*]
+                                                [/apis/*]
+                                                [/healthz]
+                                                [/livez]
+                                                [/readyz]
+                                                [/version]
+
+The important thing is that kubectl auth can-i --list displays both resource permissions and non-resource URL permissions.
+
+2. Why is Resource Names empty?
+
+You have:
+
+Resource Names
+[]
+
+That does not mean:
+
+"There are no resources."
+
+It means:
+
+The permission isn't restricted to specific resource names.
+
+For example, imagine:
+
+resources:
+  - pods
+verbs:
+  - get
+
+This means:
+
+get ANY pod
+
+unless resourceNames is specified.
+
+So the output would show:
+
+Resources:       pods
+Resource Names:  []
+Verbs:           [get]
+
+The empty [] means:
+
+No specific resource-name restriction
+3. Your Resources column is NOT empty
+
+Look carefully at these:
+
+selfsubjectreviews.authentication.k8s.io
+selfsubjectaccessreviews.authorization.k8s.io
+selfsubjectrulesreviews.authorization.k8s.io
+
+Those are resources.
+
+They're just special authorization/authentication review resources, not normal things like:
+
+pods
+secrets
+deployments
+
+For example:
+
+selfsubjectaccessreviews.authorization.k8s.io
+
+allows the identity to ask Kubernetes an authorization question about itself.
+
+That's why this command works:
+
+kubectl auth can-i ...
+
+Kubernetes has APIs that allow authorization checks.
+
+4. What are these selfsubject... resources?
+
+Let's break one down:
+
+selfsubjectaccessreviews.authorization.k8s.io
+selfsubject
+
+Means:
+
+"About my own identity."
+
+accessreviews
+
+Means:
+
+"Ask whether an action is authorized."
+
+So conceptually:
+
+rbac-demo
+   │
+   ▼
+"Can I get pods?"
+   │
+   ▼
+SelfSubjectAccessReview
+   │
+   ▼
+Kubernetes authorization system
+   │
+   ▼
+yes / no
+
+Similarly:
+
+selfsubjectrulesreviews.authorization.k8s.io
+
+is related to asking:
+
+"What permissions does my current identity have?"
+
+That's closely related to:
+
+kubectl auth can-i --list
+5. What about the huge list of URLs?
+
+This part:
+
+[/.well-known/openid-configuration]
+[/api]
+[/api/*]
+[/apis]
+[/apis/*]
+[/healthz]
+[/livez]
+[/readyz]
+[/openapi]
+[/version]
+
+is the Non-Resource URLs column.
+
+These are not Kubernetes API resources like:
+
+pods
+services
+secrets
+deployments
+
+Instead, they're HTTP endpoints exposed by the Kubernetes API server.
+
+For example:
+
+/api
+/apis
+/version
+/healthz
+/readyz
+/livez
+
+are API-server endpoints.
+
+So Kubernetes RBAC distinguishes between:
+
+RESOURCE
+   ↓
+pods
+secrets
+deployments
+services
+
+and:
+
+NON-RESOURCE URL
+   ↓
+/api
+/apis
+/version
+/healthz
+6. Why does your ServiceAccount have these?
+
+Some permissions are provided by Kubernetes' built-in RBAC configuration.
+
+Your ServiceAccount isn't necessarily getting these from the pod-reader Role we created.
+
+In particular, Kubernetes has built-in permissions associated with API discovery and authorization-related functionality.
+
+That's why even a relatively restricted identity can have things like:
+
+selfsubjectaccessreviews → create
+selfsubjectrulesreviews → create
+
+and API discovery endpoints:
+
+/api
+/apis
+/openapi
+/version
+7. The important thing: your actual application permissions aren't showing
+
+Your output currently shows:
+
+selfsubject...
+
+but no:
+
+pods
+secrets
+deployments
+
+That strongly suggests that the rbac-demo ServiceAccount currently doesn't have the workload permissions we were testing, or the temporary Roles/bindings were removed/changed.
+
+Let's verify rather than assume.
+
+Run:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+And:
+
+kubectl auth can-i create pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+I expect your deliberately restricted account to return no for permissions we haven't granted.
+
+8. One more important distinction
+
+When you see:
+
+Resource Names: []
+
+don't interpret it as:
+
+"No resources"
+
+Interpret it as:
+
+"No specific resource-name restriction"
+
+Compare these two RBAC rules.
+
+Rule A
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+
+Conceptually:
+
+get pods
+     ↓
+any Pod allowed by the scope
+Rule B
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    resourceNames:
+      - my-app
+    verbs:
+      - get
+
+Now:
+
+get pod/my-app       ✅
+get pod/other-app    ❌
+
+And kubectl auth can-i --list can show:
+
+Resources:      pods
+Resource Names: my-app
+Verbs:          [get]
+
+That's what Resource Names is for.
+
+🧠 Remember this table
+Column	Meaning
+Resources	What Kubernetes objects can I access?
+Non-Resource URLs	What API-server URLs can I access?
+Resource Names	Is access restricted to particular object names?
+Verbs	What operations can I perform?
+
+So your output is actually teaching us an important RBAC concept:
+
+                RBAC permissions
+                      │
+          ┌───────────┴───────────┐
+          ↓                       ↓
+     Resources              Non-resource URLs
+          │                       │
+     pods/secrets/etc.        /api /version/etc.
+          │
+          ↓
+    Resource Names
+          │
+          ↓
+       Verbs
+
+
