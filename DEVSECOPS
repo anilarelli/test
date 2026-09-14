@@ -9154,6 +9154,147 @@ That's the complete authorization question
 
 
 
+Now look at a potentially dangerous rule
+
+Consider:
+
+rules:
+  - apiGroups:
+      - rbac.authorization.k8s.io
+
+    resources:
+      - roles
+      - rolebindings
+
+    verbs:
+      - create
+      - update
+      - patch
+
+As a security engineer, you shouldn't immediately say:
+
+"Vulnerable."
+
+Instead investigate:
+
+Who receives this?
+What namespace?
+Which roles can they modify?
+Can they modify bindings?
+Can they grant themselves additional permissions?
+
+This is the difference between RBAC configuration review and simply searching YAML for scary words.
+
+
+
+
+
+Security assessment methodology
+
+When you perform a Kubernetes RBAC review, follow this process:
+
+Step 1 — Identify identities
+kubectl get serviceaccounts -A
+Step 2 — Identify bindings
+kubectl get rolebindings -A
+
+and:
+
+kubectl get clusterrolebindings
+
+
+
+
+
+
+Step 3 — Follow roleRef
+
+For each interesting binding:
+
+RoleBinding
+    ↓
+roleRef
+    ↓
+Role
+
+or:
+
+ClusterRoleBinding
+    ↓
+roleRef
+    ↓
+ClusterRole
+Step 4 — Inspect rules
+kubectl get role <NAME> -n <NAMESPACE> -o yaml
+
+or:
+
+kubectl get clusterrole <NAME> -o yaml
+Step 5 — Calculate effective permissions
+
+Use:
+
+kubectl auth can-i --list \
+  --as=<IDENTITY>
+Step 6 — Look for high-risk permissions
+
+Especially:
+
+secrets
+pods
+deployments
+daemonsets
+roles
+rolebindings
+clusterroles
+clusterrolebindings
+serviceaccounts
+
+and:
+
+create
+update
+patch
+delete
+bind
+escalate
+impersonate
+15. One important correction to our earlier mental model
+
+Don't think:
+
+create pods = automatically cluster compromise
+
+That's too simplistic.
+
+Instead:
+
+create pods
+     ↓
+What Pod configurations are allowed?
+     ↓
+What Pod Security controls exist?
+     ↓
+What ServiceAccount can the Pod use?
+     ↓
+What resources can that ServiceAccount access?
+     ↓
+What host/network/cloud access exists?
+     ↓
+What is the actual impact?
+
+This layered reasoning is exactly what you want to develop for Kubernetes security assessments.
+
+
+
+
+
+
+
+
+
+
+
 
 
 
