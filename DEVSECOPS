@@ -7396,3 +7396,602 @@ get pods everywhere
 It means:
 
 get pods in dev
+
+
+
+2. Let's prove namespace isolation
+
+Your ServiceAccount:
+
+system:serviceaccount:dev:rbac-demo
+
+has:
+
+get pods → dev
+
+Now ask:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Expected:
+
+yes
+
+Now:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n kube-system
+
+Expected:
+
+no
+
+This demonstrates an important principle:
+
+A RoleBinding does not magically grant the Role's permissions to other namespaces.
+
+3. ClusterRole
+
+Now let's create a ClusterRole.
+
+nano rbac-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-reader-cluster
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+
+Apply:
+
+kubectl apply -f rbac-clusterrole.yaml
+
+Notice something:
+
+metadata:
+  name: pod-reader-cluster
+
+There is no namespace.
+
+Why?
+
+Because a ClusterRole is cluster-scoped.
+
+4. ClusterRole doesn't automatically mean cluster-wide access
+
+This is an important subtle point.
+
+People often think:
+
+ClusterRole = permissions everywhere
+
+Not necessarily.
+
+The binding determines how the permissions are applied.
+
+For example, we can bind a ClusterRole to a ServiceAccount using a RoleBinding in dev.
+
+ClusterRole
+     │
+     │
+RoleBinding
+     │
+     ▼
+ServiceAccount
+
+In this configuration, the ClusterRole's permissions are used within the namespace of the RoleBinding.
+
+So:
+
+ClusterRole
+    ↓
+RoleBinding in dev
+    ↓
+ServiceAccount
+    ↓
+permissions in dev
+
+This is a powerful RBAC design pattern because you can define one reusable ClusterRole and bind it separately in multiple namespaces.
+
+5. Let's test that
+
+Create:
+
+nano rbac-clusterrole-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-reader-clusterrole-binding
+  namespace: dev
+
+subjects:
+  - kind: ServiceAccount
+    name: rbac-demo
+    namespace: dev
+
+roleRef:
+  kind: ClusterRole
+  name: pod-reader-cluster
+  apiGroup: rbac.authorization.k8s.io
+
+Apply:
+
+kubectl apply -f rbac-clusterrole-binding.yaml
+
+Now:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Should be:
+
+yes
+
+The interesting part:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n kube-system
+
+Should still be:
+
+no
+
+Because the binding is namespace-scoped to dev.
+
+6. Now the dangerous one: ClusterRoleBinding
+
+A ClusterRoleBinding applies the ClusterRole at cluster scope.
+
+Conceptually:
+
+ServiceAccount
+       │
+       ▼
+ClusterRoleBinding
+       │
+       ▼
+ClusterRole
+       │
+       ▼
+cluster-wide permissions
+
+For example, imagine:
+
+kind: ClusterRoleBinding
+
+binding:
+
+rbac-demo
+
+to:
+
+pod-reader-cluster
+
+Then the ServiceAccount could potentially:
+
+get pods in dev
+get pods in test
+get pods in prod
+get pods in kube-system
+...
+
+depending on the ClusterRole's resources/verbs.
+
+That's why:
+
+ClusterRoleBinding deserves much more scrutiny than a normal RoleBinding.
+
+7. Let's demonstrate it
+
+Create:
+
+nano rbac-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pod-reader-cluster-binding
+
+subjects:
+  - kind: ServiceAccount
+    name: rbac-demo
+    namespace: dev
+
+roleRef:
+  kind: ClusterRole
+  name: pod-reader-cluster
+  apiGroup: rbac.authorization.k8s.io
+
+Apply:
+
+kubectl apply -f rbac-clusterrolebinding.yaml
+
+Now test:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+yes
+
+And:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n kube-system
+
+Now:
+
+yes
+
+And:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n default
+
+Also:
+
+yes
+
+That's the difference.
+
+8. Visual comparison
+Role + RoleBinding
+                Role
+                 │
+                 ▼
+           get/list pods
+                 │
+                 ▼
+        ┌────────────────┐
+        │ namespace: dev │
+        └────────────────┘
+ClusterRole + RoleBinding
+             ClusterRole
+                  │
+                  ▼
+             RoleBinding
+                  │
+                  ▼
+        ┌────────────────┐
+        │ namespace: dev │
+        └────────────────┘
+
+Reusable permission definition, namespace-limited binding.
+
+ClusterRole + ClusterRoleBinding
+             ClusterRole
+                  │
+                  ▼
+        ClusterRoleBinding
+                  │
+                  ▼
+       ┌────────────────────┐
+       │ entire cluster     │
+       └────────────────────┘
+
+Potentially extremely powerful.
+
+9. RBAC permissions are additive
+
+This is another very important concept.
+
+Suppose:
+
+Role A
+  get pods
+
+and:
+
+Role B
+  delete pods
+
+Both are bound to the same ServiceAccount.
+
+The ServiceAccount gets:
+
+get pods
+delete pods
+
+RBAC doesn't work like:
+
+Role A says yes
+Role B says no
+→ deny
+
+There is no conventional explicit-deny rule in Kubernetes RBAC.
+
+Think:
+
+Permission A
+      +
+Permission B
+      +
+Permission C
+      =
+Effective permissions
+
+Therefore, when auditing a ServiceAccount, you need to examine all bindings, not just one Role.
+
+10. Now let's talk about wildcards
+
+This is where RBAC starts getting dangerous.
+
+Consider:
+
+verbs:
+  - "*"
+
+This potentially means:
+
+get
+list
+watch
+create
+update
+patch
+delete
+...
+
+And:
+
+resources:
+  - "*"
+
+means potentially:
+
+pods
+secrets
+deployments
+configmaps
+services
+...
+
+Combining:
+
+apiGroups:
+  - "*"
+
+resources:
+  - "*"
+
+verbs:
+  - "*"
+
+is effectively:
+
+Give this identity extremely broad permissions.
+
+🚨 In production, this should immediately trigger a security review.
+
+11. Why secrets are especially dangerous
+
+Imagine a compromised ServiceAccount has:
+
+get secrets
+
+An attacker may be able to retrieve Kubernetes Secrets accessible to that identity.
+
+For example:
+
+database password
+API token
+cloud credential
+registry credential
+application secret
+TLS private key
+
+So this:
+
+resources:
+  - secrets
+
+verbs:
+  - get
+
+is much more sensitive than:
+
+resources:
+  - pods
+
+verbs:
+  - get
+
+This is why a security engineer should treat:
+
+secrets
+
+as a high-value Kubernetes resource.
+
+12. ServiceAccount compromise → RBAC compromise
+
+Now we're getting into the security-engineering mindset.
+
+Imagine your Flask application runs:
+
+Pod
+ ↓
+ServiceAccount
+ ↓
+Kubernetes API
+
+If an attacker compromises the application, they may gain access to credentials associated with the Pod's ServiceAccount.
+
+Then:
+
+Web vulnerability
+       ↓
+Application compromise
+       ↓
+Pod compromise
+       ↓
+ServiceAccount credentials
+       ↓
+Kubernetes API
+       ↓
+RBAC permissions
+       ↓
+Potential cluster impact
+
+This is why Kubernetes RBAC is directly relevant to AppSec.
+
+It's not just Kubernetes administration.
+
+13. Example attack path
+
+Imagine an application ServiceAccount has:
+
+get secrets
+list pods
+create pods
+
+An attacker compromises the application.
+
+They discover:
+
+ServiceAccount token
+
+They query the Kubernetes API.
+
+RBAC says:
+
+get secrets → YES
+create pods → YES
+
+Now the compromise can potentially move beyond the original application.
+
+The exact escalation path depends heavily on the other permissions, pod security controls, namespaces, mounted credentials, cloud integration, and cluster configuration.
+
+This is why we don't simply ask:
+
+"Does the ServiceAccount have cluster-admin?"
+
+We ask:
+
+"What can this identity actually do?"
+
+14. kubectl auth can-i is your RBAC microscope
+
+You already used:
+
+kubectl auth can-i
+
+Now learn the powerful form:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+This asks:
+
+Show me the effective permissions of this identity in dev.
+
+Run it.
+
+You'll get something similar to:
+
+Resources       Non-Resource URLs   Resource Names   Verbs
+pods            []                  []               [get list watch]
+
+Depending on the bindings you've created, you may see additional permissions.
+
+This is one of the most useful commands for RBAC auditing.
+
+15. Now inspect the actual bindings
+
+Run:
+
+kubectl get role -n dev
+kubectl get rolebinding -n dev
+kubectl get clusterrole
+kubectl get clusterrolebinding
+
+And inspect one:
+
+kubectl describe rolebinding pod-reader-binding -n dev
+
+You'll see the relationship:
+
+Subject:
+  ServiceAccount: rbac-demo
+
+Role:
+  pod-reader
+
+That's the actual authorization chain.
+
+16. Security mindset: follow the chain
+
+When investigating Kubernetes RBAC, think:
+
+IDENTITY
+   ↓
+SERVICEACCOUNT / USER / GROUP
+   ↓
+BINDINGS
+   ↓
+ROLE / CLUSTERROLE
+   ↓
+RULES
+   ↓
+API GROUP
+   ↓
+RESOURCE
+   ↓
+VERB
+   ↓
+EFFECTIVE ACCESS
+
+For example:
+
+system:serviceaccount:dev:rbac-demo
+             ↓
+       RoleBinding
+             ↓
+       pod-reader
+             ↓
+       core API group
+             ↓
+           pods
+             ↓
+       get/list/watch
+
+If you can trace this chain, you understand Kubernetes RBAC.
+
+17. One very important cleanup
+
+We deliberately created:
+
+ClusterRoleBinding
+
+to demonstrate cluster-wide access.
+
+Don't leave this unnecessarily attached to our demo ServiceAccount.
+
+Remove it:
+
+kubectl delete clusterrolebinding pod-reader-cluster-binding
+
+Also, we don't need the extra ClusterRole for the moment:
+
+kubectl delete clusterrole pod-reader-cluster
+
+And we can remove the temporary ClusterRole/RoleBinding:
+
+kubectl delete rolebinding pod-reader-clusterrole-binding -n dev
+
+Keep our original:
+
+rbac-demo
+pod-reader
+pod-reader-binding
