@@ -9292,6 +9292,77 @@ This layered reasoning is exactly what you want to develop for Kubernetes securi
 
 
 
+Let's check yours now
+
+Run these three commands:
+
+kubectl config current-context
+kubectl auth whoami
+kubectl config view --minify -o jsonpath='{.contexts[0].context.user}'; echo
+
+
+
+
+
+Now we move into the security-assessment portion of RBAC.
+
+🔥 RBAC Privilege Escalation — Part 4
+
+The most important principle first:
+
+Having a Kubernetes permission is not the same thing as automatically having cluster-admin.
+
+We need to analyze permission combinations and attack paths.
+
+1. Start with a simple identity
+
+Our test identity is:
+
+system:serviceaccount:dev:rbac-demo
+
+Currently it has our Pod-reader permission:
+
+pods
+ ├── get
+ ├── list
+ └── watch
+
+Visualize it:
+
+rbac-demo
+   │
+   ▼
+RoleBinding
+   │
+   ▼
+pod-reader
+   │
+   ▼
+pods → get/list/watch
+
+This is a relatively low-privilege identity.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
