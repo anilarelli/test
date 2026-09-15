@@ -9617,6 +9617,645 @@ Then determine whether those credentials provide further access.
 
 
 
+🔥 RBAC Deep Dive — Part 5: Security Audit
+
+We're going to learn how to look at a Role and immediately answer:
+
+Is this least privilege, excessive privilege, or potentially dangerous?
+
+1. Imagine you find this Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+
+metadata:
+  name: app-role
+  namespace: dev
+
+rules:
+
+  - apiGroups: [""]
+    resources:
+      - pods
+      - secrets
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+
+And suppose:
+
+app-role
+   ↓
+RoleBinding
+   ↓
+rbac-demo
+2. How would you assess it?
+
+Don't immediately say:
+
+"It's vulnerable."
+
+Break it down.
+
+
+
+
+1. First understand the scope
+metadata:
+  name: app-role
+  namespace: dev
+
+This is a Role, not a ClusterRole.
+
+That means its permissions are limited to:
+
+dev namespace
+
+So if the ServiceAccount has this Role:
+
+dev
+ ├── Pods             ← potentially accessible
+ ├── Secrets          ← potentially accessible
+ ├── ConfigMaps       ← potentially accessible
+ └── Deployments      ← potentially manageable
+
+production
+ ├── Pods             ← NOT allowed
+ ├── Secrets          ← NOT allowed
+ └── Deployments      ← NOT allowed
+
+This is important.
+
+Namespace scope reduces the blast radius.
+
+But:
+
+Namespace-scoped does NOT mean safe.
+
+If dev contains sensitive credentials or production-like infrastructure, compromise of that namespace can still be serious.
+
+2. Rule 1 — Pods
+- apiGroups: [""]
+  resources:
+    - pods
+  verbs:
+    - get
+    - list
+    - watch
+
+Let's break this down.
+
+apiGroups: [""]
+
+The empty string means:
+
+Core Kubernetes API group
+
+Pods belong to the core API group.
+
+That's why we write:
+
+apiGroups:
+  - ""
+
+instead of:
+
+apiGroups:
+  - apps
+
+For example:
+
+Resource	API group
+Pod	""
+Service	""
+ConfigMap	""
+Secret	""
+Deployment	apps
+ReplicaSet	apps
+StatefulSet	apps
+3. get pods
+verbs:
+  - get
+
+Means:
+
+You can retrieve a specific Pod.
+
+For example:
+
+kubectl get pod myapp-xxxxx -n dev
+
+Conceptually:
+
+rbac-demo
+    │
+    │ get
+    ▼
+Pod
+
+But get alone doesn't mean:
+
+"You can see every Pod."
+
+You need permission for the particular resource/name combination you're requesting.
+
+4. list pods
+- list
+
+This is broader.
+
+It allows:
+
+kubectl get pods -n dev
+
+So the identity can discover Pods in dev.
+
+For example:
+
+myapp-abc123
+redis-xyz789
+backend-12345
+frontend-45678
+
+This matters from a security perspective because information disclosure is often the first stage of an attack.
+
+An attacker wants to know:
+
+What workloads exist?
+What services exist?
+What applications exist?
+What versions are running?
+
+RBAC can therefore control not just modification but also discovery.
+
+5. watch pods
+- watch
+
+This allows watching changes to Pods.
+
+Conceptually:
+
+Pod created
+     ↓
+Pod scheduled
+     ↓
+Pod running
+     ↓
+Pod restarted
+     ↓
+Pod deleted
+
+The identity can observe those changes through the Kubernetes API.
+
+This is useful for legitimate controllers and monitoring systems.
+
+But it can also reveal operational information.
+
+6. Is Pod read access dangerous?
+
+Usually:
+
+get/list/watch pods
+
+is not automatically critical.
+
+I'd classify it roughly as:
+
+Pod read
+   ↓
+Information disclosure
+   ↓
+Low → Medium risk
+
+The exact risk depends on what information is exposed through the Pod object.
+
+For example, Pod specifications can reveal things like:
+
+container images
+environment variables
+volume mounts
+service accounts
+commands
+arguments
+labels
+annotations
+
+And that leads us to the much more interesting permission.
+
+7. Rule 1 — Secrets 🚨
+
+Our Role also contains:
+
+resources:
+  - secrets
+
+with:
+
+verbs:
+  - get
+  - list
+  - watch
+
+This is a major security concern.
+
+Why?
+
+Because Kubernetes Secrets can contain sensitive values such as:
+
+database passwords
+API keys
+TLS private keys
+cloud credentials
+tokens
+application credentials
+8. get secrets
+
+Suppose:
+
+database-password
+
+exists in dev.
+
+If our ServiceAccount has:
+
+resources:
+  - secrets
+
+verbs:
+  - get
+
+then it may retrieve that Secret through the Kubernetes API.
+
+Important distinction:
+
+Kubernetes Secret data is commonly represented as Base64.
+
+Base64 is encoding, not encryption.
+
+For example:
+
+password123
+
+could be represented as:
+
+cGFzc3dvcmQxMjM=
+
+That does NOT make it cryptographically secret.
+
+So:
+
+Base64 ≠ encryption
+9. Why list secrets is even more concerning
+
+We have:
+
+verbs:
+  - get
+  - list
+
+That means the identity isn't restricted to one known Secret.
+
+It can potentially discover Secrets in the namespace.
+
+Think:
+
+Secret A → database password
+Secret B → API key
+Secret C → TLS material
+Secret D → application token
+
+list gives an attacker much more visibility.
+
+This is why:
+
+Never give applications Secret access unless they genuinely need it.
+
+And if they do need Secret access, try to make it as narrow as practical.
+
+10. watch secrets
+
+We also have:
+
+- watch
+
+That allows observing Secret changes.
+
+For example:
+
+Secret created
+      ↓
+Secret modified
+      ↓
+Secret deleted
+
+Again, this can be legitimate for controllers.
+
+But for an ordinary application?
+
+Usually unnecessary.
+
+11. ConfigMaps
+
+Now:
+
+resources:
+  - configmaps
+
+with:
+
+get
+list
+watch
+
+ConfigMaps aren't normally treated as secret storage.
+
+They're intended for configuration.
+
+For example:
+
+data:
+  LOG_LEVEL: "debug"
+  API_URL: "https://api.example.com"
+
+But developers sometimes put sensitive information into ConfigMaps accidentally.
+
+Therefore:
+
+ConfigMap access
+       ↓
+Usually lower risk than Secret access
+       ↓
+But still information disclosure
+12. Now Rule 2 — Deployments 🚨🚨
+
+The second rule is:
+
+- apiGroups: ["apps"]
+  resources:
+    - deployments
+  verbs:
+    - get
+    - list
+    - create
+    - update
+    - delete
+
+This is where the Role becomes significantly more powerful.
+
+
+
+
+
+13. Why apps?
+
+Deployment belongs to:
+
+apps
+
+So:
+
+apiGroups:
+  - apps
+
+Correct.
+
+The complete resource identity is essentially:
+
+apps/deployments
+
+Whereas Pod is:
+
+core/pods
+14. Read permissions on Deployments
+
+These:
+
+get
+list
+
+allow the identity to inspect deployments.
+
+For example:
+
+kubectl get deployments -n dev
+
+and:
+
+kubectl get deployment myapp-my-app-chart -n dev
+
+That's generally reasonable for deployment tooling.
+
+15. create deployments
+
+Now:
+
+- create
+
+This is much more powerful.
+
+The identity can create a Deployment.
+
+A Deployment isn't just a piece of metadata.
+
+It describes workloads.
+
+For example:
+
+spec:
+  template:
+    spec:
+      containers:
+        - image: ...
+
+So whoever can create deployments may influence what workloads Kubernetes launches.
+
+That's why:
+
+create deployment
+       ↓
+create workload
+       ↓
+potentially significant impact
+
+The actual security impact depends heavily on what other Kubernetes controls are present.
+
+16. update deployments
+
+This is also dangerous:
+
+- update
+
+Because a Deployment can be changed.
+
+For example, a deployment might originally run:
+
+my-app:v1
+
+and then be changed to:
+
+my-app:v2
+
+Deployment configuration can include things such as:
+
+container image
+environment variables
+volumes
+serviceAccount
+securityContext
+resource limits
+probes
+commands
+arguments
+
+Therefore:
+
+Being able to modify workloads is a high-impact permission.
+
+17. delete deployments
+
+And:
+
+- delete
+
+allows deleting Deployments.
+
+That creates an obvious availability risk.
+
+Conceptually:
+
+Deployment
+    │
+    ▼
+Delete
+    │
+    ▼
+ReplicaSet / workload disappears
+    │
+    ▼
+Application outage
+
+So if an application doesn't need to delete deployments:
+
+don't grant it.
+
+18. Our security assessment
+
+Let's rate the Role.
+
+Permission	Risk
+get Pods	Low
+list Pods	Low–Medium
+watch Pods	Low–Medium
+get Secrets	🔴 High
+list Secrets	🔴 High
+watch Secrets	🔴 High
+get ConfigMaps	Low–Medium
+list ConfigMaps	Medium
+watch ConfigMaps	Low–Medium
+get Deployments	Low
+list Deployments	Low–Medium
+create Deployments	🔴 High
+update Deployments	🔴 High
+delete Deployments	🔴 High
+
+Overall:
+
+🔴 Over-permissioned
+
+The biggest problems are:
+
+Secrets:
+    get
+    list
+    watch
+
+Deployments:
+    create
+    update
+    delete
+19. This violates Least Privilege
+
+This is one of the most important principles in Kubernetes security.
+
+Least Privilege
+
+Give an identity:
+
+Only the permissions it actually needs.
+
+Not:
+
+"Let's give it everything that might be useful."
+
+For example, suppose an application only needs to read one ConfigMap.
+
+Don't give it:
+
+resources:
+  - pods
+  - secrets
+  - configmaps
+
+with:
+
+get
+list
+watch
+
+Instead, make the permission much narrower.
+
+20. Think like an AppSec engineer
+
+When reviewing RBAC, ask these questions:
+
+Question 1
+
+Who is the identity?
+
+Example:
+
+system:serviceaccount:dev:rbac-demo
+Question 2
+
+What namespace can it affect?
+
+Example:
+
+dev
+Question 3
+
+What resources can it access?
+
+pods
+secrets
+configmaps
+deployments
+Question 4
+
+What actions can it perform?
+
+get
+list
+watch
+create
+update
+delete
+Question 5
+
+Does it actually need each permission?
+
+This is the key security question.
 
 
 
@@ -9625,9 +10264,45 @@ Then determine whether those credentials provide further access.
 
 
 
+The mental model I want you to remember
 
+Every RBAC rule can be understood as:
 
+WHO
+ │
+ └── ServiceAccount / User / Group
+          │
+          ▼
+WHERE
+ │
+ └── Namespace / Cluster
+          │
+          ▼
+WHAT
+ │
+ └── Resource
+          │
+          ▼
+DO WHAT
+ │
+ └── Verb
 
+For example:
 
+WHO:
+system:serviceaccount:dev:rbac-demo
 
+WHERE:
+dev
 
+WHAT:
+secrets
+
+DO WHAT:
+get/list/watch
+
+That translates to:
+
+"The rbac-demo identity can read and watch Secrets in the dev namespace."
+
+That's the core of Kubernetes RBAC.
