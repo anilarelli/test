@@ -11151,3 +11151,228 @@ WHERE is this RoleBinding effective?
 Answer:
 
 dev
+
+
+
+So remember:
+
+           RoleBinding
+          /           \
+         /             \
+     subject          roleRef
+       │                 │
+       ▼                 ▼
+   WHO gets it?     WHAT do they get?
+
+
+
+1. metadata.name
+name: binding-3
+
+This is simply the name of the RoleBinding object itself.
+
+So Kubernetes has an object:
+
+RoleBinding
+    name: binding-3
+
+You could name it:
+
+name: my-binding
+
+or:
+
+name: developer-access-binding
+
+or:
+
+name: banana
+
+The name itself gives no permissions.
+
+It's just how you identify this particular RoleBinding.
+
+For example:
+
+kubectl get rolebinding -n dev
+
+might show:
+
+NAME          ROLE
+binding-3     Role/deployment-manager
+
+And you could inspect it with:
+
+kubectl get rolebinding binding-3 -n dev -o yaml
+
+
+2. metadata.namespace
+namespace: dev
+
+This is much more important.
+
+It tells Kubernetes:
+
+This RoleBinding exists in the dev namespace.
+
+So:
+
+metadata:
+  name: binding-3
+  namespace: dev
+
+means:
+
+Object type:
+    RoleBinding
+
+Object name:
+    binding-3
+
+Object namespace:
+    dev
+
+Think of it like a file:
+
+dev/
+   binding-3
+3. Now look at the entire example
+kind: RoleBinding
+
+metadata:
+  name: binding-3
+  namespace: dev
+
+subjects:
+  - kind: User
+    name: developer1
+
+roleRef:
+  kind: Role
+  name: deployment-manager
+  apiGroup: rbac.authorization.k8s.io
+
+We can break it into:
+
+                 RoleBinding
+                     │
+                     │
+              name: binding-3
+                     │
+                     │
+              namespace: dev
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+       subject               roleRef
+          │                     │
+          ▼                     ▼
+      developer1       Role/deployment-manager
+
+Read the whole thing as:
+
+The RoleBinding called binding-3, which exists in the dev namespace, gives developer1 the permissions defined by the deployment-manager Role.
+
+4. Very important distinction
+
+These two namespaces can look confusing:
+
+metadata:
+  namespace: dev
+
+and:
+
+subjects:
+  - kind: ServiceAccount
+    name: config-reader
+    namespace: dev
+
+They are not the same thing.
+
+metadata.namespace
+metadata:
+  namespace: dev
+
+means:
+
+Where does this RoleBinding object exist?
+
+subjects[].namespace
+
+For a ServiceAccount:
+
+subjects:
+  - kind: ServiceAccount
+    namespace: dev
+
+means:
+
+Which namespace contains this ServiceAccount identity?
+
+5. What about the User example?
+
+Our example has:
+
+subjects:
+  - kind: User
+    name: developer1
+
+There is no namespace here.
+
+Why?
+
+Because Kubernetes Users are not namespaced.
+
+A User:
+
+developer1
+
+is a cluster-level identity.
+
+Whereas a ServiceAccount:
+
+system:serviceaccount:dev:config-reader
+
+is namespaced.
+
+6. The key concept
+
+For a RoleBinding, remember:
+
+metadata.namespace
+        ↓
+Where the binding grants permissions
+
+while:
+
+metadata.name
+        ↓
+Name of the binding object
+
+and:
+
+subjects
+        ↓
+WHO receives the permissions
+
+and:
+
+roleRef
+        ↓
+WHICH Role/ClusterRole provides the permissions
+
+So your mental model should now be:
+
+RoleBinding
+│
+├── metadata.name
+│      └── What is this binding called?
+│
+├── metadata.namespace
+│      └── Which namespace is this binding in?
+│
+├── subjects
+│      └── WHO gets permission?
+│
+└── roleRef
+       └── WHAT permissions do they get?
