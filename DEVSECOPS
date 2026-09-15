@@ -11376,3 +11376,391 @@ RoleBinding
 │
 └── roleRef
        └── WHAT permissions do they get?
+
+
+
+
+
+Let's continue. We are at RBAC → #3 ServiceAccounts.
+
+RBAC Part 7 — ServiceAccounts
+
+So far we've seen:
+
+Role
+   ↓
+defines permissions
+
+RoleBinding
+   ↓
+assigns permissions
+
+ServiceAccount
+   ↓
+the identity that receives them
+
+The key question now is:
+
+How does a Pod/application actually become rbac-demo and use that identity?
+
+1. What is a ServiceAccount?
+
+A ServiceAccount is a Kubernetes identity intended for workloads.
+
+For example:
+
+kubectl create serviceaccount rbac-demo -n dev
+
+This creates:
+
+ServiceAccount
+    name: rbac-demo
+    namespace: dev
+
+Think:
+
+Human
+  → User
+
+Application / Pod
+  → ServiceAccount
+
+A Pod doesn't normally authenticate to the Kubernetes API as your personal Kubernetes user.
+
+Instead, it can use a ServiceAccount.
+
+2. ServiceAccount by itself has no special permissions
+
+This is extremely important.
+
+If you create:
+
+kubectl create serviceaccount test-sa -n dev
+
+you have created an identity:
+
+test-sa
+
+But you haven't given it your custom permissions.
+
+Conceptually:
+
+test-sa
+   │
+   └── Identity
+       └── no custom RBAC permissions yet
+
+Then you can bind a Role:
+
+test-sa
+   ↓
+RoleBinding
+   ↓
+pod-reader
+
+Now it has those permissions.
+
+3. How does a Pod use a ServiceAccount?
+
+A Pod specification can contain:
+
+spec:
+  serviceAccountName: rbac-demo
+
+For example:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbac-test
+  namespace: dev
+
+spec:
+  serviceAccountName: rbac-demo
+
+  containers:
+    - name: test
+      image: nginx
+
+The important line is:
+
+serviceAccountName: rbac-demo
+
+It means:
+
+Run this Pod using the rbac-demo ServiceAccount identity.
+
+So:
+
+Pod
+ │
+ │ serviceAccountName
+ ▼
+rbac-demo
+ │
+ │ RoleBinding
+ ▼
+pod-reader
+ │
+ ▼
+get/list/watch pods
+4. What happens if we don't specify it?
+
+If you don't specify:
+
+serviceAccountName:
+
+Kubernetes normally assigns the namespace's:
+
+default
+
+ServiceAccount.
+
+So a Pod like:
+
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+
+will normally run as:
+
+default
+
+ServiceAccount in that namespace.
+
+Therefore, one security best practice is:
+
+Don't casually run applications using a more privileged ServiceAccount.
+
+
+
+
+
+5. See the ServiceAccounts in your namespace
+
+Run:
+
+kubectl get serviceaccounts -n dev
+
+You should see something similar to:
+
+NAME        SECRETS   AGE
+default     0         ...
+rbac-demo   0         ...
+
+Depending on your Kubernetes version, the SECRETS column may show 0. That's normal with modern ServiceAccount token handling.
+
+6. Inspect rbac-demo
+
+Run:
+
+kubectl get serviceaccount rbac-demo -n dev -o yaml
+
+You'll see something resembling:
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rbac-demo
+  namespace: dev
+
+Notice:
+
+metadata:
+  name: rbac-demo
+  namespace: dev
+
+This is the identity.
+
+It does NOT contain:
+
+verbs:
+resources:
+apiGroups:
+
+Those permissions are elsewhere.
+
+Remember our architecture:
+
+ServiceAccount
+       │
+       │ identity
+       ▼
+RoleBinding
+       │
+       │ reference
+       ▼
+Role
+       │
+       │ rules
+       ▼
+permissions
+7. Your rbac-demo identity
+
+The full Kubernetes identity is:
+
+system:serviceaccount:dev:rbac-demo
+
+Break it apart:
+
+system
+  :
+serviceaccount
+  :
+dev
+  :
+rbac-demo
+
+Meaning:
+
+system
+    → Kubernetes system identity namespace
+
+serviceaccount
+    → identity type
+
+dev
+    → ServiceAccount namespace
+
+rbac-demo
+    → ServiceAccount name
+
+That's why we used:
+
+--as=system:serviceaccount:dev:rbac-demo
+
+with kubectl auth can-i.
+
+8. Now connect this to your previous lesson
+
+You previously had:
+
+ServiceAccount:
+rbac-demo
+
+and:
+
+Role:
+pod-reader
+
+and:
+
+RoleBinding:
+pod-reader-binding
+
+The complete relationship is:
+
+                dev namespace
+
+       ServiceAccount
+          rbac-demo
+              │
+              │ subject
+              ▼
+       RoleBinding
+    pod-reader-binding
+              │
+              │ roleRef
+              ▼
+            Role
+         pod-reader
+              │
+              ▼
+       get/list/watch
+             Pods
+
+That's the complete RBAC chain.
+
+9. Hands-on: create a Pod using rbac-demo
+
+Let's make a tiny test Pod.
+
+Create rbac-test.yaml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbac-test
+  namespace: dev
+
+spec:
+  serviceAccountName: rbac-demo
+
+  containers:
+    - name: test
+      image: nginx
+
+Apply it:
+
+kubectl apply -f rbac-test.yaml
+
+Check:
+
+kubectl get pod rbac-test -n dev
+
+Then inspect:
+
+kubectl get pod rbac-test -n dev -o yaml
+
+Look for:
+
+serviceAccountName: rbac-demo
+
+That proves the Pod is configured to use that ServiceAccount.
+
+
+
+
+10. One subtle but important point
+
+Don't think:
+
+Pod
+  = ServiceAccount
+
+They're different objects.
+
+Instead:
+
+Pod
+ │
+ └── configured to use
+          │
+          ▼
+    ServiceAccount
+
+The Pod is the workload.
+
+The ServiceAccount is the identity.
+
+The Role/ClusterRole is the permission definition.
+
+The Binding is the connection between identity and permissions.
+
+Your mental model now
+                WHO?
+                  │
+                  ▼
+           ServiceAccount
+            rbac-demo
+                  │
+                  │
+             RoleBinding
+                  │
+                  │
+                  ▼
+                WHAT?
+                  │
+                  ▼
+                 Role
+             pod-reader
+                  │
+                  ▼
+        get/list/watch Pods
+                  │
+                  ▼
+                WHERE?
+                  │
+                  ▼
+                 dev
