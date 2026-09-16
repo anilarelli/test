@@ -13129,3 +13129,147 @@ Other resources include:
 rolebindings
 clusterroles
 clusterrolebindings
+
+
+
+8. Let's build a resource map
+
+Here's a useful map to memorize:
+
+API Group	Resource
+""	pods
+""	services
+""	secrets
+""	configmaps
+""	namespaces
+apps	deployments
+apps	replicasets
+apps	statefulsets
+apps	daemonsets
+batch	jobs
+batch	cronjobs
+networking.k8s.io	ingresses
+networking.k8s.io	networkpolicies
+rbac.authorization.k8s.io	roles
+rbac.authorization.k8s.io	rolebindings
+rbac.authorization.k8s.io	clusterroles
+rbac.authorization.k8s.io	clusterrolebindings
+
+
+
+
+
+9. Why does RBAC need both?
+
+Consider:
+
+apiGroups:
+  - apps
+resources:
+  - deployments
+
+Kubernetes needs both pieces because resource names can exist in different API contexts.
+
+The authorization request can be thought of as something like:
+
+API Group
+    +
+Resource
+    +
+Verb
+    +
+Namespace
+    +
+Resource Name
+
+For example:
+
+apps
++
+deployments
++
+get
++
+dev
++
+myapp
+
+That's much more precise than simply saying:
+
+"get myapp"
+
+
+
+
+12. Practical way to discover API groups
+
+You don't need to memorize everything.
+
+Run:
+
+kubectl api-resources
+
+This is an extremely useful command.
+
+
+13. APIVERSION vs apiGroups
+
+This is another common confusion.
+
+You might see:
+
+apps/v1
+
+in:
+
+kubectl api-resources
+
+But RBAC uses:
+
+apiGroups:
+  - apps
+
+Why?
+
+Because:
+
+apps/v1
+
+is:
+
+API group + API version
+
+while:
+
+apiGroups:
+  - apps
+
+specifies the API group for the authorization rule.
+
+So:
+
+apps/v1
+ │   │
+ │   └── version
+ │
+ └────── group
+
+RBAC's apiGroups field uses:
+
+apps
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
