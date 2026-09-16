@@ -12051,3 +12051,439 @@ rather than:
 Application
    ↓
 cluster-admin
+
+
+
+RBAC Part 10 — kubectl auth can-i Deep Dive
+
+You've already used:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Now let's understand how security engineers use this command for RBAC auditing.
+
+1. What does can-i actually do?
+
+The simplest form:
+
+kubectl auth can-i get pods -n dev
+
+is essentially asking Kubernetes:
+
+"Would the currently authenticated identity be authorized to perform get on Pods in dev?"
+
+Possible result:
+
+yes
+
+or:
+
+no
+
+It does not perform the operation.
+
+That's why it's excellent for security testing.
+
+
+2. The four things you should always identify
+
+When reading a can-i command, identify:
+
+WHO
+WHAT
+RESOURCE
+WHERE
+
+For:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+we have:
+
+WHO:
+system:serviceaccount:dev:rbac-demo
+
+WHAT:
+get
+
+RESOURCE:
+pods
+
+WHERE:
+dev
+
+Then Kubernetes answers:
+
+ALLOW → yes
+DENY  → no
+
+
+
+3. Check multiple permissions
+
+You can test individual permissions:
+
+kubectl auth can-i get pods -n dev
+kubectl auth can-i list pods -n dev
+kubectl auth can-i create pods -n dev
+kubectl auth can-i delete pods -n dev
+
+For your rbac-demo, you can test:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i create pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+
+
+
+4. The --list option
+
+This is one you've already used:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Instead of asking:
+
+"Can I do this one thing?"
+
+you're asking:
+
+"Show me the permissions available to this identity."
+
+You'll get output containing columns similar to:
+
+Resources       Non-Resource URLs    Resource Names    Verbs
+---------       -----------------    --------------    -----
+pods            []                   []                [get list watch]
+
+This is extremely useful during an RBAC audit.
+
+
+
+5. --list is an authorization inventory
+
+Imagine the output says:
+
+pods                    [get list watch]
+configmaps              [get list watch]
+secrets                 [get list watch]
+deployments.apps        [get list create update delete]
+
+As a security engineer, you immediately ask:
+
+Why does this application need Secrets?
+
+Why can it create Deployments?
+
+Why can it delete Deployments?
+
+That's how you turn raw RBAC output into a security review.
+
+
+
+6. Testing another identity with --as
+
+This is particularly useful.
+
+Example:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+You're telling Kubernetes:
+
+"Perform the authorization check as if the request came from this identity."
+
+This is called impersonation.
+
+Important:
+
+--as here is being used for an authorization test. It doesn't magically give your shell the ServiceAccount's credentials.
+
+You're asking:
+
+"Would Kubernetes authorize this identity?"
+
+
+
+7. ServiceAccount identity format
+
+For a ServiceAccount:
+
+system:serviceaccount:<namespace>:<name>
+
+So:
+
+system:serviceaccount:dev:rbac-demo
+
+means:
+
+system
+   ↓
+serviceaccount
+   ↓
+dev
+   ↓
+rbac-demo
+
+Another example:
+
+system:serviceaccount:monitoring:prometheus
+
+means:
+
+ServiceAccount
+Name: prometheus
+Namespace: monitoring
+
+
+8. Namespace testing
+
+This is a very useful RBAC audit technique.
+
+Suppose:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+returns:
+
+yes
+
+Now:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n staging
+
+could return:
+
+no
+
+This allows you to test blast radius across namespaces.
+
+You're essentially asking:
+
+dev       → YES
+staging   → ?
+production → ?
+
+
+
+
+9. Test the same identity against different resources
+
+For example:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+kubectl auth can-i get deployments \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+You are building a permission matrix:
+
+Resource	get	list	create	delete
+Pods	?	?	?	?
+Secrets	?	?	?	?
+ConfigMaps	?	?	?	?
+Deployments	?	?	?	?
+
+This is exactly the kind of thinking useful in a Kubernetes security assessment.
+
+
+
+10. resourceNames
+
+Now let's connect this to a topic you already encountered.
+
+Suppose a Role contains:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    resourceNames:
+      - myapp
+    verbs:
+      - get
+
+This means:
+
+get Pod "myapp"
+
+rather than:
+
+get every Pod
+
+You can test a specific resource with:
+
+kubectl auth can-i get pod myapp \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+And another Pod:
+
+kubectl auth can-i get pod another-pod \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+The answers can differ.
+
+
+
+11. Resource name vs resource type
+
+This distinction is important.
+
+pods
+
+means:
+
+What type of Kubernetes object?
+
+While:
+
+myapp-7d8f9c
+
+means:
+
+Which specific object?
+
+So:
+
+resource:
+    pods
+
+resourceName:
+    myapp-7d8f9c
+
+is equivalent conceptually to:
+
+WHAT TYPE?
+Pod
+
+WHICH ONE?
+myapp-7d8f9c
+
+
+12. Test your current identity
+
+You can also omit --as.
+
+kubectl auth can-i get pods -n dev
+
+Now Kubernetes checks your actual authenticated identity.
+
+Compare that with:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+These are two different questions:
+
+Without --as
+    ↓
+"What can I do?"
+
+With --as
+    ↓
+"What could rbac-demo do?"
+
+
+
+13. Security audit workflow
+
+When reviewing a ServiceAccount, I'd do something like:
+
+Step 1
+
+Find identity:
+
+kubectl get serviceaccount -n dev
+Step 2
+
+Find its permissions:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+Step 3
+
+Test sensitive resources:
+
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+Step 4
+
+Test workload modification:
+
+kubectl auth can-i create deployments \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+Step 5
+
+Test deletion:
+
+kubectl auth can-i delete deployments \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+Step 6
+
+Check other namespaces:
+
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n kube-system
+
+This gives you a basic RBAC attack-surface map without actually performing destructive operations.
+
+
+
+14. One subtle point about --as
+
+Your ability to use arbitrary impersonation isn't itself guaranteed.
+
+For example, you might try:
+
+kubectl auth can-i get secrets \
+  --as=some-other-user \
+  -n dev
+
+and Kubernetes may reject the request because your actual identity isn't authorized to impersonate that user.
+
+That's separate from whether some-other-user itself has permission.
+
+So there are two authorization questions:
+
+Question 1:
+Can I impersonate X?
+
+Question 2:
+Can X perform the requested action?
+
+This distinction becomes important when we later discuss RBAC privilege escalation.
+
+
+
