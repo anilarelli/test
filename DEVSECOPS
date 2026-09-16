@@ -11764,3 +11764,290 @@ Your mental model now
                   │
                   ▼
                  dev
+
+
+
+RBAC Part 8 — ServiceAccount Authentication & Tokens
+
+Now we connect the pieces we already learned.
+
+We have:
+
+Pod
+ ↓
+ServiceAccount
+ ↓
+Token
+ ↓
+Kubernetes API
+ ↓
+Authentication
+ ↓
+RBAC Authorization
+
+
+
+1. Imagine your application calls the Kubernetes API
+
+Suppose your Flask application running inside a Pod wants to ask Kubernetes:
+
+"Show me the Pods in my namespace."
+
+It sends a request to the Kubernetes API server.
+
+But Kubernetes first asks:
+
+"Who is making this request?"
+
+That's authentication.
+
+Then:
+
+"Is that identity allowed to list Pods?"
+
+That's authorization.
+
+RBAC is primarily involved in the second question.
+
+
+
+2. Where does the Pod get its identity?
+
+We previously configured:
+
+spec:
+  serviceAccountName: rbac-demo
+
+Therefore:
+
+Pod
+ ↓
+uses
+ ↓
+ServiceAccount/rbac-demo
+
+Kubernetes can provide the Pod with credentials associated with that ServiceAccount.
+
+3. ServiceAccount token
+
+The token is essentially a credential that the workload can use when communicating with the Kubernetes API.
+
+Conceptually:
+
+ServiceAccount
+      ↓
+credential/token
+      ↓
+Pod
+      ↓
+API request
+      ↓
+API Server
+
+The API server can use that credential to determine the identity making the request.
+
+4. Important modern Kubernetes behavior
+
+You may have heard:
+
+"Every ServiceAccount creates a Secret containing a token."
+
+That was the older model.
+
+Modern Kubernetes generally uses short-lived, automatically managed ServiceAccount tokens rather than creating a permanent Secret token for every ServiceAccount.
+
+That's why when you run:
+
+kubectl get serviceaccount rbac-demo -n dev
+
+you may see:
+
+SECRETS
+0
+
+That does not mean the ServiceAccount cannot authenticate.
+
+Modern Kubernetes commonly uses projected ServiceAccount tokens inside Pods.
+
+5. What does "projected" mean?
+
+Think about a Pod filesystem.
+
+Kubernetes can make a token available inside the Pod through a mounted volume.
+
+Conceptually:
+
+Pod filesystem
+│
+└── /var/run/secrets/...
+       │
+       └── ServiceAccount credentials
+
+The application can use those credentials when talking to the Kubernetes API.
+
+6. Let's inspect your test Pod
+
+If you created the Pod from the previous lesson:
+
+rbac-test
+
+run:
+
+kubectl get pod rbac-test -n dev -o yaml
+
+Look for:
+
+serviceAccountName: rbac-demo
+
+That tells us:
+
+rbac-test
+    ↓
+rbac-demo
+7. Inspect the mounted volumes
+
+Run:
+
+kubectl describe pod rbac-test -n dev
+
+Look near the bottom for:
+
+Mounts:
+
+and:
+
+Volumes:
+
+You may see something similar to:
+
+/var/run/secrets/kubernetes.io/serviceaccount
+
+This is where Kubernetes makes ServiceAccount-related credentials available to the container.
+
+8. Let's look inside the container
+
+Run:
+
+kubectl exec -it rbac-test -n dev -- ls -la /var/run/secrets/kubernetes.io/serviceaccount
+
+You may see files such as:
+
+ca.crt
+namespace
+token
+
+Conceptually:
+
+ca.crt
+   ↓
+CA certificate used to establish trust with API server
+
+namespace
+   ↓
+Pod's namespace information
+
+token
+   ↓
+credential used for authentication
+9. The token is NOT the RBAC permission
+
+This distinction is extremely important.
+
+Suppose:
+
+token
+
+identifies the Pod as:
+
+system:serviceaccount:dev:rbac-demo
+
+That does not mean:
+
+"rbac-demo can do everything."
+
+Instead:
+
+Token
+ ↓
+Authentication
+ ↓
+"You're rbac-demo."
+ ↓
+RBAC
+ ↓
+"What can rbac-demo do?"
+
+And then RBAC checks the Roles and Bindings.
+
+10. Your existing configuration
+
+We have:
+
+ServiceAccount
+rbac-demo
+
+Then:
+
+RoleBinding
+pod-reader-binding
+
+Then:
+
+Role
+pod-reader
+
+Then:
+
+get/list/watch
+Pods
+
+So if the Pod uses rbac-demo:
+
+Pod
+ │
+ │ credentials
+ ▼
+API Server
+ │
+ │ identifies caller
+ ▼
+system:serviceaccount:dev:rbac-demo
+ │
+ │ RBAC authorization
+ ▼
+RoleBinding
+ │
+ ▼
+pod-reader
+ │
+ ▼
+get/list/watch pods
+
+
+One more important security point
+
+If an attacker compromises a Pod, they may be able to access credentials available to that Pod.
+
+Therefore:
+
+The ServiceAccount assigned to a workload matters.
+
+If you run an application with:
+
+highly privileged ServiceAccount
+
+and that application gets compromised, the attacker may inherit the permissions available to that ServiceAccount.
+
+That's why we want:
+
+Application
+   ↓
+Dedicated ServiceAccount
+   ↓
+Minimum required RBAC
+
+rather than:
+
+Application
+   ↓
+cluster-admin
