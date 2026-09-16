@@ -12893,3 +12893,239 @@ resources:
   - "*"
 verbs:
   - "*"
+
+
+
+                 SUBJECT
+                    │
+                    ▼
+             RoleBinding
+                    │
+                    ▼
+              Role / ClusterRole
+                    │
+          ┌─────────┼─────────┐
+          ▼         ▼         ▼
+       API Group  Resource    Verb
+          │         │         │
+          ▼         ▼         ▼
+         apps    deployment   get
+                              list
+                              update
+                              ...
+
+
+
+RBAC Part 12 — API Groups & Resources
+
+This is one of the areas that initially makes RBAC YAML look confusing:
+
+apiGroups:
+  - apps
+resources:
+  - deployments
+verbs:
+  - get
+
+Once you understand what apiGroups and resources mean, the YAML becomes much easier to read.
+
+1. Start with the Kubernetes API
+
+Kubernetes exposes an API.
+
+When you run:
+
+kubectl get pods
+
+you're effectively asking the Kubernetes API:
+
+"Give me Pods."
+
+When you run:
+
+kubectl get deployments
+
+you're asking:
+
+"Give me Deployments."
+
+Different Kubernetes objects are organized into API groups.
+
+2. The core API group
+
+Some fundamental Kubernetes resources belong to the core API group.
+
+In RBAC YAML, the core API group is represented by:
+
+apiGroups:
+  - ""
+
+Notice:
+
+""
+
+It's an empty string.
+
+Common core resources include:
+
+Pods
+Services
+ConfigMaps
+Secrets
+Namespaces
+Nodes
+PersistentVolumes
+PersistentVolumeClaims
+
+So this:
+
+apiGroups:
+  - ""
+resources:
+  - pods
+
+means:
+
+Core API group
+      ↓
+Pods
+3. Why isn't it called core?
+
+This is an interesting Kubernetes design detail.
+
+You might expect:
+
+apiGroups:
+  - core
+
+But that's not how Kubernetes represents the core API group.
+
+It is:
+
+apiGroups:
+  - ""
+
+So memorize this one:
+
+"" = core API group
+
+You'll see it constantly in RBAC YAML.
+
+4. apps API group
+
+Deployments don't belong to the core API group.
+
+They belong to:
+
+apps
+
+Therefore:
+
+apiGroups:
+  - apps
+
+resources:
+  - deployments
+
+means:
+
+apps API group
+       ↓
+deployments
+
+Other common apps resources include:
+
+deployments
+replicasets
+statefulsets
+daemonsets
+5. batch API group
+
+Jobs and CronJobs belong to:
+
+batch
+
+For example:
+
+apiGroups:
+  - batch
+
+resources:
+  - jobs
+
+means:
+
+batch
+  ↓
+jobs
+
+And:
+
+apiGroups:
+  - batch
+
+resources:
+  - cronjobs
+
+means:
+
+batch
+  ↓
+cronjobs
+6. Networking API group
+
+Ingress belongs to:
+
+networking.k8s.io
+
+So:
+
+apiGroups:
+  - networking.k8s.io
+
+resources:
+  - ingresses
+
+means:
+
+networking.k8s.io
+        ↓
+    ingresses
+
+NetworkPolicy is also associated with this API group:
+
+apiGroups:
+  - networking.k8s.io
+
+resources:
+  - networkpolicies
+
+We'll use this heavily when we reach Network Policies.
+
+7. RBAC API group
+
+This one is particularly relevant to what we're learning.
+
+Roles and bindings themselves belong to:
+
+rbac.authorization.k8s.io
+
+For example:
+
+apiGroups:
+  - rbac.authorization.k8s.io
+
+resources:
+  - roles
+
+means:
+
+RBAC API group
+      ↓
+Roles
+
+Other resources include:
+
+rolebindings
+clusterroles
+clusterrolebindings
