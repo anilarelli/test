@@ -13330,3 +13330,55 @@ delete
 That's why wildcard permissions deserve careful review.
 
 
+16. One more important field: namespaced
+
+When you run:
+
+kubectl api-resources
+
+you'll see:
+
+NAMESPACED
+
+For example:
+
+pods             true
+deployments      true
+services         true
+namespaces       false
+nodes             false
+
+This tells you whether the resource itself is namespaced.
+
+So:
+
+Pod
+  ↓
+namespaced = true
+
+means Pods exist inside namespaces.
+
+Whereas:
+
+Node
+  ↓
+namespaced = false
+
+means Nodes are cluster-scoped resources.
+
+
+
+                SUBJECT
+                   │
+                   ▼
+              BINDING
+                   │
+                   ▼
+            ROLE / CLUSTERROLE
+                   │
+          ┌────────┼─────────┐
+          ▼        ▼         ▼
+      API GROUP  RESOURCE   VERB
+          │        │         │
+          ▼        ▼         ▼
+        apps   deployments   get
