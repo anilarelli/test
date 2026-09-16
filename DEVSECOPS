@@ -12487,3 +12487,409 @@ This distinction becomes important when we later discuss RBAC privilege escalati
 
 
 
+RBAC Part 11 — Wildcards in Kubernetes RBAC
+
+Wildcards look simple:
+
+verbs:
+  - "*"
+
+or:
+
+resources:
+  - "*"
+
+But from a security perspective, they can be very dangerous.
+
+1. What does * mean?
+
+In RBAC, * essentially means:
+
+All matching values in that field.
+
+For example:
+
+verbs:
+  - "*"
+
+means:
+
+get
+list
+watch
+create
+update
+patch
+delete
+...
+
+Instead of explicitly specifying individual verbs.
+
+Similarly:
+
+resources:
+  - "*"
+
+means:
+
+All resources covered by the relevant API group(s).
+
+2. Simple example
+
+Consider:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+
+This is relatively explicit:
+
+Pods
+ ├── get
+ └── list
+
+Now change it to:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - "*"
+
+Now:
+
+Pods
+ ├── get
+ ├── list
+ ├── watch
+ ├── create
+ ├── update
+ ├── patch
+ └── delete
+
+The identity went from read-only to broad control over Pods.
+
+3. Resource wildcard
+
+Now consider:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - "*"
+    verbs:
+      - get
+
+This means:
+
+Core API resources
+      │
+      ├── pods
+      ├── services
+      ├── secrets
+      ├── configmaps
+      ├── namespaces
+      ├── nodes
+      └── ...
+
+with:
+
+get
+
+permission.
+
+Notice the difference:
+
+resources:
+  - "*"
+
+doesn't automatically mean:
+
+all API groups
+
+because API groups are controlled separately.
+
+4. API group wildcard
+
+You can also have:
+
+apiGroups:
+  - "*"
+
+Now you're saying:
+
+Match resources across API groups.
+
+For example:
+
+core
+apps
+batch
+networking.k8s.io
+rbac.authorization.k8s.io
+...
+
+Combined with:
+
+resources:
+  - "*"
+
+verbs:
+  - "*"
+
+you are essentially saying:
+
+ALL API GROUPS
+      +
+ALL RESOURCES
+      +
+ALL VERBS
+
+That is an extremely broad permission set.
+
+5. The dangerous combination 🚨
+
+Imagine:
+
+rules:
+  - apiGroups:
+      - "*"
+    resources:
+      - "*"
+    verbs:
+      - "*"
+
+Conceptually:
+
+                    Identity
+                       │
+                       ▼
+                 API groups: *
+                       │
+                       ▼
+                 Resources: *
+                       │
+                       ▼
+                   Verbs: *
+                       │
+                       ▼
+                Extremely broad
+                  permissions
+
+This is the kind of configuration that should immediately trigger a security review.
+
+6. Why are wildcards risky?
+
+Kubernetes evolves.
+
+Today your cluster may have:
+
+pods
+deployments
+services
+
+Tomorrow you install:
+
+new CRDs
+new controllers
+new operators
+new APIs
+
+A narrowly defined permission might remain:
+
+get pods
+
+But a wildcard may automatically apply to additional resources that appear later.
+
+So:
+
+Explicit permissions
+        ↓
+Predictable scope
+
+Wildcard permissions
+        ↓
+Potentially expanding scope
+
+This is one reason security engineers generally prefer explicit permissions when practical.
+
+7. Wildcard verbs are particularly important
+
+Suppose an application only needs:
+
+get
+list
+watch
+
+Don't automatically give:
+
+verbs:
+  - "*"
+
+because now you're potentially giving it modification permissions such as:
+
+create
+update
+patch
+delete
+
+That's a huge difference.
+
+Think:
+
+Read:
+get/list/watch
+
+versus:
+
+Modify:
+create/update/patch/delete
+8. Wildcard resources can expose Secrets
+
+Suppose you have:
+
+apiGroups:
+  - ""
+
+resources:
+  - "*"
+
+verbs:
+  - get
+
+Even if the application only needs:
+
+get pods
+
+you've potentially also given it access to:
+
+secrets
+configmaps
+services
+...
+
+That's unnecessary privilege.
+
+A more precise rule would be:
+
+apiGroups:
+  - ""
+
+resources:
+  - pods
+
+verbs:
+  - get
+
+This is least privilege.
+
+9. Wildcard API groups
+
+Consider:
+
+apiGroups:
+  - "*"
+resources:
+  - pods
+verbs:
+  - get
+
+There is another subtle point here.
+
+pods is a core API resource, so API group matching matters.
+
+You shouldn't think:
+
+"*"
++
+"pods"
+=
+all resources
+
+No.
+
+It's:
+
+all matching API groups
++
+resource "pods"
++
+get
+
+RBAC evaluates these fields together.
+
+10. Security review example
+
+Suppose you discover:
+
+rules:
+  - apiGroups:
+      - "*"
+    resources:
+      - "*"
+    verbs:
+      - "*"
+
+As an AppSec/DevSecOps engineer, don't just say:
+
+"Wildcard is bad."
+
+Ask:
+
+WHO?
+     ↓
+Which ServiceAccount/User?
+
+WHERE?
+     ↓
+Role or ClusterRole?
+
+WHAT?
+     ↓
+Which resources?
+
+DO WHAT?
+     ↓
+Which verbs?
+
+BLAST RADIUS?
+     ↓
+One namespace or entire cluster?
+
+For example, if this is a ClusterRole bound through a ClusterRoleBinding, the potential scope is much broader than if equivalent permissions are constrained through a namespace-specific RoleBinding.
+
+11. Important exception: wildcards aren't inherently evil
+
+Don't memorize:
+
+* = always wrong.
+
+That's too simplistic.
+
+Some Kubernetes controllers legitimately need broad permissions.
+
+The security question is:
+
+Does the workload actually need the breadth of access?
+
+For example, a cluster-wide controller may legitimately need to observe many resource types.
+
+But an ordinary application like:
+
+frontend
+backend
+Flask API
+
+usually shouldn't receive:
+
+apiGroups:
+  - "*"
+resources:
+  - "*"
+verbs:
+  - "*"
