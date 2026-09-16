@@ -13263,13 +13263,70 @@ apps
 
 
 
+14. Version isn't normally written in the RBAC rule
+
+You don't write:
+
+apiGroups:
+  - apps/v1
+
+You write:
+
+apiGroups:
+  - apps
+
+That's because RBAC's apiGroups field identifies the API group, not the version.
 
 
 
 
 
 
+15. Why this matters for security
 
+Imagine you're auditing a Role and see:
 
+apiGroups:
+  - "*"
+
+resources:
+  - "*"
+
+verbs:
+  - "*"
+
+Now you understand what that means much better.
+
+It's potentially broad across:
+
+Core APIs
+apps
+batch
+networking.k8s.io
+rbac.authorization.k8s.io
+...
+
+and:
+
+Pods
+Secrets
+Deployments
+Jobs
+Ingresses
+RBAC objects
+...
+
+with:
+
+get
+list
+watch
+create
+update
+patch
+delete
+...
+
+That's why wildcard permissions deserve careful review.
 
 
