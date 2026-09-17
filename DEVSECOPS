@@ -14956,3 +14956,427 @@ Rules
 Actual permissions
 
 That's the core of RBAC auditing.
+
+
+
+🔎 RBAC Security Audit — Hands-on
+
+The objective is to answer:
+
+"Who can do what, where, and how could that become dangerous?"
+
+1. Start with the identity
+
+Every RBAC investigation starts with a subject.
+
+For your lab, we've been using:
+
+system:serviceaccount:dev:rbac-demo
+
+Break it apart:
+
+system
+   │
+   └── Kubernetes system identity
+
+serviceaccount
+   │
+   └── type of identity
+
+dev
+   │
+   └── ServiceAccount namespace
+
+rbac-demo
+   │
+   └── ServiceAccount name
+
+So:
+
+system:serviceaccount:dev:rbac-demo
+
+means:
+
+ServiceAccount rbac-demo belonging to namespace dev.
+
+2. Ask Kubernetes for the complete permission set
+
+This is one of the most useful commands in an RBAC assessment:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Think of it as:
+
+WHO?
+ ↓
+rbac-demo
+
+WHERE?
+ ↓
+dev
+
+WHAT?
+ ↓
+all allowed actions
+
+You'll get output resembling:
+
+Resources                 Non-Resource URLs
+---------                 ------------------
+pods                      [...]
+pods/log                  [...]
+configmaps                [...]
+secrets                   [...]
+
+Don't just look at the number of permissions.
+
+Look for sensitive combinations.
+
+3. The dangerous combinations
+
+During a real audit, these deserve particular attention.
+
+Combination A
+create pods
++
+access to secrets
+
+Why?
+
+A workload can potentially interact with sensitive data depending on its configuration and other controls.
+
+Combination B
+create/update deployments
++
+ServiceAccount access
+
+Why?
+
+Deployments control workloads.
+
+Deployment
+    ↓
+ReplicaSet
+    ↓
+Pod
+
+Changing the workload specification can therefore have consequences beyond simply changing metadata.
+
+Combination C
+create rolebindings
++
+bind
+
+Potentially allows an identity to grant roles to subjects.
+
+Combination D
+create/update roles
++
+escalate
+
+Potentially allows creation/modification of Roles containing permissions beyond the caller's ordinary RBAC authority.
+
+Combination E
+impersonate serviceaccounts
+
+This can allow requests to be made as another ServiceAccount, subject to the permissions of that identity and other controls.
+
+4. Namespace scope matters
+
+This is another major audit principle.
+
+Suppose you have:
+
+Role
+namespace: dev
+
+Its permissions apply within:
+
+dev
+
+A Role isn't automatically cluster-wide.
+
+But:
+
+ClusterRole
++
+ClusterRoleBinding
+
+can provide cluster-wide authority.
+
+Therefore, during an audit ask:
+
+Is this permission:
+
+namespace-scoped?
+        or
+cluster-scoped?
+5. A subtle point: ClusterRole + RoleBinding
+
+This is important enough to memorize.
+
+A ClusterRole doesn't necessarily mean the permissions are always cluster-wide.
+
+You can have:
+
+ClusterRole
+     ↓
+RoleBinding in dev
+     ↓
+permissions used in dev
+
+So the binding type and location matter.
+
+Compare:
+
+ClusterRole
+     ↓
+RoleBinding
+     ↓
+dev
+
+with:
+
+ClusterRole
+     ↓
+ClusterRoleBinding
+     ↓
+cluster-wide
+
+This is why you should never determine scope merely by looking at the word ClusterRole.
+
+6. Audit the bindings
+
+Now examine the relationship:
+
+Subject
+   ↓
+Binding
+   ↓
+Role
+   ↓
+Rules
+
+For your existing binding:
+
+kubectl get rolebinding pod-reader-binding -n dev -o yaml
+
+Look for:
+
+subjects:
+  - kind: ServiceAccount
+    name: rbac-demo
+    namespace: dev
+
+Then:
+
+roleRef:
+  kind: Role
+  name: pod-reader
+
+This tells you:
+
+rbac-demo
+    ↓
+pod-reader-binding
+    ↓
+pod-reader
+    ↓
+get/list/watch pods
+
+That's the exact chain we want to trace.
+
+7. Inspect the Role
+
+Run:
+
+kubectl get role pod-reader -n dev -o yaml
+
+You'll see the rule:
+
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+
+Translate it into plain English:
+
+API group:
+    core
+
+Resource:
+    pods
+
+Allowed:
+    get
+    list
+    watch
+
+Namespace:
+    dev
+
+Therefore:
+
+rbac-demo can read/watch Pods in dev.
+
+It does not automatically mean:
+
+get secrets
+create pods
+delete pods
+get pods in kube-system
+create deployments
+
+That's least privilege in action.
+
+8. Least privilege
+
+This is the principle we're ultimately trying to achieve.
+
+Suppose an application only needs:
+
+get pods
+
+Don't give it:
+
+get
+list
+watch
+create
+update
+patch
+delete
+
+And don't give it:
+
+resources:
+  - "*"
+
+And don't give it:
+
+apiGroups:
+  - "*"
+
+Instead:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+
+The principle is:
+
+Required permission
+       ↓
+only that permission
+       ↓
+only that resource
+       ↓
+only that namespace
+9. Think like an attacker — but audit safely
+
+Instead of actually exploiting anything, ask Kubernetes:
+
+kubectl auth can-i get secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i list secrets \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i create pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i delete pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+And:
+
+kubectl auth can-i create deployments \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+This gives us an authorization attack-surface map without changing the cluster.
+
+10. Test namespace boundaries
+
+This is especially important.
+
+You already know:
+
+rbac-demo
+   ↓
+dev
+
+Now test:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n kube-system
+
+Compare that with:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+This teaches you something fundamental:
+
+The identity's namespace and the target resource's namespace are separate concepts.
+
+11. Audit cluster-scoped resources
+
+Now test:
+
+kubectl auth can-i get nodes \
+  --as=system:serviceaccount:dev:rbac-demo
+
+Notice there is no:
+
+-n dev
+
+because Nodes are cluster-scoped.
+
+Similarly:
+
+kubectl auth can-i get namespaces \
+  --as=system:serviceaccount:dev:rbac-demo
+
+Again, cluster-scoped.
+
+This distinction becomes extremely important when we get to Kubernetes attack paths.
+
+🧠 The RBAC audit matrix
+
+I want you to start thinking in this format:
+
+Question	Example
+Who?	rbac-demo
+Where?	dev
+API group?	"", apps, etc.
+Resource?	Pods, Secrets, Deployments
+Verb?	get, create, delete
+Scope?	namespace / cluster
+Binding?	RoleBinding / ClusterRoleBinding
+Escalation?	escalate / bind / impersonate
+Impact?	read / modify / administer
+
+That's the foundation of professional Kubernetes RBAC assessment.
