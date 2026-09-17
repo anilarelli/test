@@ -13847,3 +13847,16 @@ update	Replace/update object	Write
 patch	Partially modify object	Write
 delete	Delete object	Delete
 deletecollection	Delete multiple objects	Delete
+
+
+RBAC
+
+1. Role vs ClusterRole             ✅
+2. RoleBinding vs ClusterRoleBinding ✅
+3. ServiceAccounts                 ✅
+4. ServiceAccount tokens           ✅
+5. kubectl auth can-i              ✅
+6. resourceNames                   ✅
+7. Wildcards                       ✅
+8. API Groups & Resources          ✅
+9. Verbs                           ← YOU ARE HERE
