@@ -14626,3 +14626,333 @@ bind
 impersonate
 
 These deserve special attention during a Kubernetes security assessment.
+
+
+
+
+🔐 RBAC Misconfiguration Lab
+
+The goal is to learn how an apparently ordinary permission can become dangerous.
+
+We will not exploit or modify your cluster. We'll reason about the scenarios and use kubectl auth can-i for authorization checks.
+
+Scenario 1 — Secret access
+
+Suppose someone gives a ServiceAccount:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+
+At first glance:
+
+get    → read a Secret
+list   → enumerate Secrets
+watch  → observe Secret changes
+
+The important security issue is that Secrets can contain credentials and other sensitive configuration.
+
+So this permission:
+
+list secrets
+
+is much more significant than:
+
+list pods
+
+Even though both technically use the same RBAC verb.
+
+Security assessment
+resource       permission       sensitivity
+------------------------------------------------
+pods           list             relatively low
+configmaps     list             potentially sensitive
+secrets        list             high
+
+This is why RBAC assessment isn't just:
+
+"Does this account have list?"
+
+You must ask:
+
+"List what?"
+
+Scenario 2 — create pods
+
+Consider:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - create
+
+It doesn't say:
+
+secrets
+clusterroles
+cluster-admin
+
+So it may look harmless.
+
+But workload creation is security-sensitive because a Pod specification controls things such as:
+
+container image
+command
+volumes
+ServiceAccount
+environment variables
+security context
+network configuration
+
+For example:
+
+spec:
+  serviceAccountName: some-service-account
+
+means the workload can be associated with that ServiceAccount.
+
+That is why, during a Kubernetes security assessment, workload creation permissions deserve careful review.
+
+The actual impact depends on what other permissions and admission/security controls exist in the cluster.
+
+Scenario 3 — update deployments
+
+Suppose:
+
+resources:
+  - deployments
+verbs:
+  - update
+
+A Deployment controls the Pods it creates.
+
+Conceptually:
+
+Deployment
+    ↓
+ReplicaSet
+    ↓
+Pods
+
+Therefore:
+
+update deployment
+
+is more powerful than merely:
+
+get deployment
+
+because modifying a Deployment can change the workload specification.
+
+For example, a Deployment might contain:
+
+spec:
+  template:
+    spec:
+      serviceAccountName: backend-sa
+
+Changing workload configuration can therefore have security implications beyond the Deployment object itself.
+
+Scenario 4 — Wildcard permissions
+
+Consider:
+
+rules:
+  - apiGroups:
+      - "*"
+    resources:
+      - "*"
+    verbs:
+      - "*"
+
+Let's break it down.
+
+apiGroups: ["*"]
+
+Potentially covers:
+
+core
+apps
+batch
+networking.k8s.io
+rbac.authorization.k8s.io
+...
+resources: ["*"]
+
+Potentially covers all resources within those groups.
+
+verbs: ["*"]
+
+Potentially covers all supported operations.
+
+Together:
+
+* API groups
+      +
+* resources
+      +
+* verbs
+
+creates extremely broad authority.
+
+Compare that with:
+
+apiGroups: [""]
+resources:
+  - pods
+verbs:
+  - get
+  - list
+  - watch
+
+The second is much easier to understand and audit.
+
+Scenario 5 — ClusterRoleBinding
+
+This is one of the most important RBAC concepts.
+
+Remember:
+
+RoleBinding
+
+can bind a Role or ClusterRole to a subject.
+
+ClusterRoleBinding
+
+binds a ClusterRole at cluster scope.
+
+Conceptually:
+
+RoleBinding
+
+ServiceAccount
+      ↓
+Role
+      ↓
+ONE namespace
+
+versus:
+
+ClusterRoleBinding
+
+ServiceAccount
+      ↓
+ClusterRole
+      ↓
+CLUSTER-WIDE
+
+Therefore, a binding such as:
+
+kind: ClusterRoleBinding
+
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+
+deserves immediate attention during an RBAC review.
+
+Scenario 6 — cluster-admin
+
+We previously discussed an important point:
+
+The name cluster-admin itself does not grant anything.
+
+This:
+
+roleRef:
+  name: cluster-admin
+
+means:
+
+"Use the ClusterRole object whose name is cluster-admin."
+
+The actual permissions come from that object's rules.
+
+So the correct investigation sequence is:
+
+kubectl get clusterrole cluster-admin -o yaml
+
+Then inspect:
+
+rules
+
+rather than assuming the name itself is the authority.
+
+Scenario 7 — Dangerous binding chain
+
+Here's a very useful mental model for finding RBAC escalation paths.
+
+Imagine:
+
+ServiceAccount
+      │
+      ▼
+RoleBinding
+      │
+      ▼
+Role
+      │
+      ▼
+permissions
+
+But also:
+
+ServiceAccount
+      │
+      ▼
+ClusterRoleBinding
+      │
+      ▼
+ClusterRole
+      │
+      ▼
+cluster-wide permissions
+
+And potentially:
+
+ServiceAccount
+      │
+      ▼
+workload creation
+      │
+      ▼
+another ServiceAccount
+      │
+      ▼
+another permission set
+
+During a security audit, you're looking for these permission relationships, not just individual YAML objects.
+
+🔎 Your RBAC Audit Method
+
+This is the workflow I want you to remember.
+
+Step 1 — Find identities
+kubectl get serviceaccounts -A
+Step 2 — Find Roles
+kubectl get roles -A
+Step 3 — Find ClusterRoles
+kubectl get clusterroles
+Step 4 — Find RoleBindings
+kubectl get rolebindings -A
+Step 5 — Find ClusterRoleBindings
+kubectl get clusterrolebindings
+Step 6 — Follow the relationship
+Subject
+   ↓
+Binding
+   ↓
+Role / ClusterRole
+   ↓
+Rules
+   ↓
+Actual permissions
+
+That's the core of RBAC auditing.
