@@ -14239,3 +14239,390 @@ RBAC progress
 8. API Groups & Resources              ✅
 9. Verbs                               ✅
 10. Non-Resource URLs                  ← YOU ARE HERE
+
+
+
+
+🔐 RBAC — Privilege Escalation
+
+This is one of the most important Kubernetes security topics because an attacker doesn't necessarily need cluster-admin directly.
+
+They may start with something that looks harmless:
+
+create Pods
+
+and find a way to obtain access equivalent to a more privileged identity.
+
+1. What does "privilege escalation" mean?
+
+In simple terms:
+
+A user/workload has permission A, but uses that permission to obtain or exercise permission B that they were not supposed to have.
+
+Example:
+
+rbac-demo
+   │
+   ├── can create Pods
+   │
+   └── creates/modifies a workload
+             │
+             ▼
+       uses a more privileged
+       ServiceAccount
+             │
+             ▼
+       gains that identity's
+       API permissions
+
+The important distinction is:
+
+Direct privilege
+rbac-demo
+    ↓
+RoleBinding
+    ↓
+cluster-admin
+
+The account directly has huge permissions.
+
+Indirect privilege
+rbac-demo
+    ↓
+can create/modify workload
+    ↓
+workload uses privileged identity
+    ↓
+privileged identity's permissions
+
+The original account may never have been directly bound to cluster-admin.
+
+2. Kubernetes has protections against RBAC escalation
+
+Kubernetes RBAC specifically protects against a very important scenario.
+
+Suppose you have:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - secrets
+    verbs:
+      - get
+
+You can read Secrets.
+
+But you shouldn't automatically be able to create this:
+
+rules:
+  - apiGroups: ["*"]
+    resources:
+      - "*"
+    verbs:
+      - "*"
+
+Otherwise you could simply create your own powerful Role and grant yourself everything.
+
+Kubernetes therefore has special RBAC permissions around this.
+
+The three important concepts are:
+
+escalate
+bind
+impersonate
+
+These are extremely important for security testing.
+
+3. escalate
+
+escalate is related to creating or modifying Roles and ClusterRoles with permissions beyond your own authority.
+
+Think of this:
+
+Can I create a Role?
+        ↓
+YES
+
+does not necessarily mean
+
+Can I create ANY Role I want?
+        ↓
+NO
+
+Kubernetes performs an escalation check.
+
+For example, imagine:
+
+rbac-demo
+
+has:
+
+pods:
+  get
+  list
+  watch
+
+It tries to create a Role containing:
+
+secrets:
+  get
+  list
+
+If rbac-demo doesn't have those Secret permissions, Kubernetes' RBAC escalation protection can prevent the Role creation.
+
+Unless the caller has the special:
+
+escalate
+
+permission.
+
+4. Why is escalate dangerous?
+
+Imagine somebody has:
+
+escalate roles
+
+They could potentially create/modify Roles with permissions beyond their current authority.
+
+Conceptually:
+
+Normal RBAC
+───────────
+
+My permissions
+      ↓
+Can grant only what I already have
+
+
+With escalate
+─────────────
+
+My permissions
+      ↓
+escalate
+      ↓
+Can create Roles with greater permissions
+
+That's why escalate should be treated as a highly sensitive permission.
+
+5. bind
+
+Now imagine this situation.
+
+There is already a powerful Role:
+
+Role: secret-admin
+
+with:
+
+secrets:
+  get
+  list
+  create
+  update
+  delete
+
+Suppose:
+
+rbac-demo
+
+doesn't have those permissions.
+
+Could it simply create a RoleBinding like:
+
+rbac-demo
+      ↓
+RoleBinding
+      ↓
+secret-admin
+
+and obtain them?
+
+Kubernetes has another RBAC protection:
+
+bind
+
+The bind permission controls the ability to bind Roles/ClusterRoles in ways that could grant permissions the caller doesn't already possess.
+
+So conceptually:
+
+escalate
+   ↓
+"Can I create/modify a role with greater permissions?"
+
+bind
+   ↓
+"Can I grant an existing powerful role to someone?"
+
+This distinction is very important.
+
+6. impersonate
+
+The third major concept is:
+
+impersonate
+
+Suppose you are:
+
+system:serviceaccount:dev:rbac-demo
+
+but you have permission to impersonate:
+
+system:serviceaccount:dev:admin-sa
+
+You could potentially make an API request asking Kubernetes to treat the request as coming from that identity.
+
+Conceptually:
+
+Actual identity
+
+rbac-demo
+    │
+    │ impersonate
+    ▼
+admin-sa
+    │
+    ▼
+admin-sa permissions
+
+This is why impersonation permissions are also extremely sensitive.
+
+7. Don't confuse --as with actually having impersonation
+
+You've already seen:
+
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+You might wonder:
+
+"If I can use --as, doesn't that mean I can impersonate?"
+
+No.
+
+--as tells Kubernetes:
+
+"For this authorization check, test the request as this identity."
+
+Your actual authenticated identity still matters.
+
+For a real API request using impersonation, your identity needs the appropriate impersonate authorization.
+
+So:
+
+--as
+ ↓
+Ask Kubernetes to perform an authorization check
+as another identity
+
+is different from:
+
+impersonate permission
+ ↓
+Actually allowed to make requests as another identity
+8. Let's inspect your rbac-demo
+
+We won't create or delete anything yet.
+
+We're going to perform authorization checks only.
+
+Your identity:
+
+system:serviceaccount:dev:rbac-demo
+
+Run:
+
+kubectl auth can-i create roles \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i update roles \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i escalate roles \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+9. Check RoleBindings
+
+Run:
+
+kubectl auth can-i create rolebindings \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Then:
+
+kubectl auth can-i bind roles \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+10. Check ClusterRole escalation permissions
+
+ClusterRoles are cluster-scoped, so don't specify -n dev for these checks:
+
+kubectl auth can-i create clusterroles \
+  --as=system:serviceaccount:dev:rbac-demo
+kubectl auth can-i update clusterroles \
+  --as=system:serviceaccount:dev:rbac-demo
+kubectl auth can-i escalate clusterroles \
+  --as=system:serviceaccount:dev:rbac-demo
+
+And:
+
+kubectl auth can-i bind clusterroles \
+  --as=system:serviceaccount:dev:rbac-demo
+11. Check impersonation
+
+First check ServiceAccount impersonation:
+
+kubectl auth can-i impersonate serviceaccounts \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+Also check users:
+
+kubectl auth can-i impersonate users \
+  --as=system:serviceaccount:dev:rbac-demo
+
+And groups:
+
+kubectl auth can-i impersonate groups \
+  --as=system:serviceaccount:dev:rbac-demo
+🧠 Your mental model
+
+At this point, think of RBAC as several layers:
+
+                 Kubernetes RBAC
+                       │
+        ┌──────────────┼───────────────┐
+        │              │               │
+     Normal         Escalation      Identity
+   permissions      controls        controls
+        │              │               │
+        │              │               │
+   get/list/etc    escalate          impersonate
+   create/update   bind
+   delete
+
+And remember:
+
+Normal verbs
+get
+list
+watch
+create
+update
+patch
+delete
+deletecollection
+Special security-sensitive verbs
+escalate
+bind
+impersonate
+
+These deserve special attention during a Kubernetes security assessment.
