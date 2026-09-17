@@ -13382,3 +13382,468 @@ means Nodes are cluster-scoped resources.
           │        │         │
           ▼        ▼         ▼
         apps   deployments   get
+
+
+
+
+RBAC Part 13 — Kubernetes Verbs
+
+We've already seen:
+
+apiGroups:
+  - apps
+resources:
+  - deployments
+
+Now we need to understand:
+
+verbs:
+  - get
+  - list
+  - watch
+
+The verb determines what operation the identity can perform on the resource.
+
+1. The main verbs
+
+The important RBAC verbs are:
+
+get
+list
+watch
+create
+update
+patch
+delete
+deletecollection
+
+Think of them as:
+
+READ
+ ├── get
+ ├── list
+ └── watch
+
+WRITE
+ ├── create
+ ├── update
+ └── patch
+
+DELETE
+ ├── delete
+ └── deletecollection
+2. get
+verbs:
+  - get
+
+Means:
+
+Retrieve a specific Kubernetes object.
+
+Example:
+
+kubectl get pod myapp-abc123 -n dev
+
+Conceptually:
+
+get
+ ↓
+ONE specific object
+
+For example:
+
+Pod/myapp-abc123
+3. list
+verbs:
+  - list
+
+Means:
+
+Retrieve a collection of objects.
+
+Example:
+
+kubectl get pods -n dev
+
+Conceptually:
+
+list
+ ↓
+collection of Pods
+
+For example:
+
+myapp-abc123
+myapp-def456
+redis-xyz789
+Important difference
+get
+ ↓
+specific object
+
+list
+ ↓
+collection of objects
+
+This distinction matters for least privilege.
+
+4. watch
+verbs:
+  - watch
+
+Means:
+
+Watch for changes to resources.
+
+Conceptually:
+
+Pod created
+     ↓
+watch
+     ↓
+Pod modified
+     ↓
+watch
+     ↓
+Pod deleted
+
+Controllers commonly need this capability.
+
+For example, a Kubernetes controller might watch Deployments and react when something changes.
+
+5. create
+verbs:
+  - create
+
+Means:
+
+Create a new object.
+
+For example:
+
+kubectl create deployment test --image=nginx -n dev
+
+A subject with:
+
+resources:
+  - deployments
+
+verbs:
+  - create
+
+can create Deployments, assuming the rest of the authorization request matches.
+
+6. update
+verbs:
+  - update
+
+Means:
+
+Replace/update an existing resource.
+
+For example, changing an existing Deployment's configuration.
+
+Conceptually:
+
+Existing Deployment
+        ↓
+      update
+        ↓
+Modified Deployment
+
+update is therefore a write permission.
+
+7. patch
+
+This one is very important.
+
+verbs:
+  - patch
+
+means:
+
+Make a partial modification to an existing object.
+
+Instead of replacing the whole object, a patch changes selected fields.
+
+Conceptually:
+
+Deployment
+    │
+    ├── image: v1
+    ├── replicas: 3
+    └── environment: prod
+
+A patch might change only:
+
+image: v1 → v2
+
+while leaving the rest unchanged.
+
+8. update vs patch
+
+This is a common interview question.
+
+Update
+
+Think:
+
+"I am replacing the resource representation."
+Patch
+
+Think:
+
+"I am changing selected parts of the resource."
+
+So:
+
+update → broader replacement-style modification
+
+patch → partial modification
+
+Both are write permissions and should be granted only when needed.
+
+9. delete
+verbs:
+  - delete
+
+means:
+
+Delete a specific object.
+
+Example:
+
+kubectl delete pod myapp-abc123 -n dev
+
+Conceptually:
+
+Pod
+ ↓
+delete
+ ↓
+Pod removed
+
+This is obviously an availability-impacting permission for many resources.
+
+10. deletecollection
+
+This is less commonly discussed but important.
+
+verbs:
+  - deletecollection
+
+means:
+
+Delete a collection of resources.
+
+Think:
+
+delete
+   ↓
+one object
+
+deletecollection
+   ↓
+multiple matching objects
+
+This can therefore have a much broader impact.
+
+11. A practical RBAC example
+
+Consider:
+
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+
+This means:
+
+Pods
+ │
+ ├── get   ✅
+ ├── list  ✅
+ ├── watch ✅
+ ├── create ❌
+ ├── update ❌
+ ├── patch  ❌
+ └── delete ❌
+
+So this is essentially a:
+
+Pod read-only permission
+
+12. Add create
+
+Now:
+
+verbs:
+  - get
+  - list
+  - watch
+  - create
+
+becomes:
+
+Pods
+ │
+ ├── get     ✅
+ ├── list    ✅
+ ├── watch   ✅
+ ├── create  ✅
+ ├── update  ❌
+ ├── patch   ❌
+ └── delete  ❌
+
+The identity can now create Pods.
+
+That's a significant increase in capability.
+
+13. Add delete
+
+If we add:
+
+- delete
+
+the identity can now remove individual Pods.
+
+So:
+
+READ
+ ├── get
+ ├── list
+ └── watch
+
+WRITE
+ └── create
+
+DELETE
+ └── delete
+
+This is why you shouldn't look at:
+
+resources:
+  - pods
+
+alone.
+
+You must always inspect:
+
+verbs:
+14. The security-review approach
+
+Suppose you discover:
+
+resources:
+  - deployments
+
+verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+  - delete
+
+Don't simply write:
+
+"Deployment access."
+
+Instead translate it:
+
+Can inspect deployments
+       ↓
+Can create deployments
+       ↓
+Can modify deployments
+       ↓
+Can partially modify deployments
+       ↓
+Can delete deployments
+
+That's much more useful from an AppSec perspective.
+
+15. Verb + Resource = Capability
+
+This is an important mental model:
+
+Resource alone
+     ↓
+doesn't tell you enough
+
+Verb alone
+     ↓
+doesn't tell you enough
+
+Resource + Verb
+     ↓
+actual capability
+
+For example:
+
+pods + get
+
+means:
+
+Read a specific Pod.
+
+Whereas:
+
+pods + delete
+
+means:
+
+Delete a Pod.
+
+And:
+
+deployments + update
+
+means:
+
+Modify an existing Deployment.
+
+16. get + list are NOT identical
+
+This is worth remembering.
+
+Suppose you have:
+
+verbs:
+  - get
+
+You should not assume that means:
+
+kubectl get pods
+
+will work.
+
+get and list are separate authorization operations.
+
+Generally:
+
+get
+ → individual resource
+
+list
+ → collection
+
+So a security engineer should explicitly test both when assessing permissions.
+
+17. Your RBAC permission matrix
+
+You can use this when auditing:
+
+Verb	General meaning	Type
+get	Read one object	Read
+list	Read collection	Read
+watch	Observe changes	Read/Observe
+create	Create object	Write
+update	Replace/update object	Write
+patch	Partially modify object	Write
+delete	Delete object	Delete
+deletecollection	Delete multiple objects	Delete
