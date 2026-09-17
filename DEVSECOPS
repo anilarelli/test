@@ -13860,3 +13860,382 @@ RBAC
 7. Wildcards                       ✅
 8. API Groups & Resources          ✅
 9. Verbs                           ← YOU ARE HERE
+
+
+RBAC Part 14 — Non-Resource URLs
+
+So far we've mostly dealt with Kubernetes resources:
+
+Pods
+Deployments
+Secrets
+ConfigMaps
+Services
+
+But the Kubernetes API server also exposes URLs that aren't Kubernetes objects.
+
+These are called non-resource URLs.
+
+1. Resource vs Non-Resource
+
+A normal resource request might be:
+
+GET /api/v1/namespaces/dev/pods
+
+That's asking for:
+
+Resource:
+pods
+
+RBAC can control it with:
+
+resources:
+  - pods
+
+But Kubernetes also has endpoints such as:
+
+/version
+/healthz
+/readyz
+/livez
+
+These aren't Kubernetes resources.
+
+Therefore RBAC uses:
+
+nonResourceURLs:
+
+instead of:
+
+resources:
+2. Example
+
+A ClusterRole could contain:
+
+rules:
+  - nonResourceURLs:
+      - /version
+    verbs:
+      - get
+
+This means:
+
+Allow GET access to the Kubernetes API /version endpoint.
+
+Notice there is no:
+
+apiGroups:
+resources:
+
+because /version isn't a Kubernetes resource.
+
+3. Resource request
+
+Think:
+
+GET
+ ↓
+Pod
+ ↓
+RBAC resources
+
+Example:
+
+apiGroups:
+  - ""
+resources:
+  - pods
+verbs:
+  - get
+4. Non-resource request
+
+Think:
+
+GET
+ ↓
+/version
+ ↓
+RBAC nonResourceURLs
+
+Example:
+
+nonResourceURLs:
+  - /version
+verbs:
+  - get
+5. Why did you see these earlier?
+
+When you ran:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+you previously saw entries such as:
+
+/.well-known/openid-configuration
+/api
+/api/*
+/apis
+/apis/*
+/healthz
+/livez
+/openapi
+/openapi/*
+/readyz
+/version
+/version/
+
+Those are Non-Resource URLs.
+
+They aren't Pods, Secrets, Deployments, etc.
+
+6. What does /version do?
+
+The Kubernetes API exposes:
+
+/version
+
+which provides Kubernetes version information.
+
+For example, Kubernetes might return information corresponding to its server version.
+
+You can see it using:
+
+kubectl version
+
+among other information.
+
+7. /healthz
+
+Historically Kubernetes exposed:
+
+/healthz
+
+for health checking.
+
+There are also:
+
+/livez
+/readyz
+
+which are used for health/readiness-related checks.
+
+These endpoints are useful for:
+
+monitoring
+load balancers
+health checks
+Kubernetes infrastructure
+8. Why does RBAC care?
+
+Because these are still API-server endpoints.
+
+Kubernetes therefore needs a way to authorize access to them.
+
+That's what:
+
+nonResourceURLs:
+
+provides.
+
+9. Example with both resources and non-resource URLs
+
+A ClusterRole could technically contain separate rules:
+
+rules:
+
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+
+  - nonResourceURLs:
+      - /version
+      - /healthz
+    verbs:
+      - get
+
+Now we have:
+
+Resource permissions
+        │
+        ├── get pods
+        └── list pods
+
+Non-resource permissions
+        │
+        ├── GET /version
+        └── GET /healthz
+10. Why isn't /version written as a resource?
+
+Because:
+
+/version
+
+is an API-server endpoint.
+
+It's not an object stored in Kubernetes like:
+
+Pod
+Deployment
+Secret
+ConfigMap
+
+So these are fundamentally different:
+
+Kubernetes object:
+Pod/myapp
+
+API endpoint:
+/version
+11. Wildcards work here too
+
+You can encounter:
+
+nonResourceURLs:
+  - /api/*
+
+This means URLs matching that path pattern.
+
+For example:
+
+/api/v1
+/api/v1/...
+
+depending on the matching rules.
+
+You should treat broad non-resource URL permissions carefully because they can expose more API-server functionality than intended.
+
+12. Security perspective
+
+When auditing RBAC, don't only look at:
+
+resources:
+
+Also look for:
+
+nonResourceURLs:
+
+Your audit checklist should now be:
+
+apiGroups
+resources
+resourceNames
+verbs
+nonResourceURLs
+
+For example:
+
+rules:
+  - nonResourceURLs:
+      - "*"
+    verbs:
+      - "*"
+
+would be a very broad non-resource URL permission and deserves immediate investigation.
+
+13. Resource URL vs Non-resource URL
+
+Here's the easiest mental model:
+
+                    Kubernetes API
+                          │
+             ┌────────────┴────────────┐
+             │                         │
+       RESOURCE REQUEST          NON-RESOURCE REQUEST
+             │                         │
+             ▼                         ▼
+          /api/...                 /version
+          /apis/...                /healthz
+             │                     /readyz
+             │                     /livez
+             ▼                         ▼
+        resources:              nonResourceURLs:
+          pods                    /version
+          secrets                 /healthz
+          deployments             ...
+14. One important correction to our earlier mental model
+
+We previously simplified RBAC to:
+
+WHO
+ ↓
+WHAT
+ ↓
+WHERE
+
+Now make it slightly more precise:
+
+WHO
+ ↓
+Binding / identity
+
+WHAT
+ ↓
+API group + resource
+       OR
+non-resource URL
+
+ACTION
+ ↓
+Verb
+
+WHERE
+ ↓
+Namespace, when applicable
+
+So a Kubernetes authorization decision can involve:
+
+Identity
+API group
+Resource
+Verb
+Namespace
+Resource name
+
+or, for non-resource requests:
+
+Identity
+URL
+Verb
+Hands-on
+
+Let's inspect what your cluster exposes.
+
+Run:
+
+kubectl auth can-i --list \
+  --as=system:serviceaccount:dev:rbac-demo \
+  -n dev
+
+At the bottom, identify:
+
+Non-Resource URLs
+
+Then run:
+
+kubectl auth can-i get /version \
+  --as=system:serviceaccount:dev:rbac-demo
+
+And:
+
+kubectl auth can-i get /healthz \
+  --as=system:serviceaccount:dev:rbac-demo
+
+Notice that we don't use -n dev to define the scope of /version in the same way we do for a namespaced resource. A non-resource URL isn't a namespaced Kubernetes object.
+
+RBAC progress
+1. Role vs ClusterRole                 ✅
+2. RoleBinding vs ClusterRoleBinding   ✅
+3. ServiceAccounts                     ✅
+4. ServiceAccount tokens               ✅
+5. kubectl auth can-i                  ✅
+6. resourceNames                       ✅
+7. Wildcards                           ✅
+8. API Groups & Resources              ✅
+9. Verbs                               ✅
+10. Non-Resource URLs                  ← YOU ARE HERE
