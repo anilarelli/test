@@ -15380,3 +15380,478 @@ Escalation?	escalate / bind / impersonate
 Impact?	read / modify / administer
 
 That's the foundation of professional Kubernetes RBAC assessment.
+
+
+
+
+
+🌐 Kubernetes Network Policies
+
+So far, we've controlled:
+
+WHO can access Kubernetes API resources?
+                 ↓
+                RBAC
+
+Now we're going to control:
+
+WHO can communicate with WHICH workload?
+                 ↓
+          NetworkPolicy
+1. Why NetworkPolicy exists
+
+Imagine your cluster:
+
+                 Kubernetes Cluster
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+       Web            API            DB
+        │              │              │
+     frontend       backend        database
+
+Without network restrictions, depending on the cluster/network configuration, workloads may be able to communicate more broadly than intended.
+
+For example:
+
+frontend ───────→ backend
+frontend ───────→ database
+backend  ───────→ database
+
+But perhaps the intended architecture is:
+
+frontend ───────→ backend ───────→ database
+
+and:
+
+frontend ──X──→ database
+
+NetworkPolicy lets you express those network boundaries.
+
+2. RBAC vs NetworkPolicy
+
+This distinction is extremely important.
+
+RBAC
+
+Controls Kubernetes API authorization:
+
+Can rbac-demo:
+    get pods?
+    delete pods?
+    create deployments?
+NetworkPolicy
+
+Controls network traffic between Pods/endpoints:
+
+Can frontend Pod:
+    connect to backend Pod?
+    connect to database Pod?
+
+So:
+
+RBAC       = API authorization
+NetworkPolicy = network authorization
+
+They solve different problems.
+
+3. NetworkPolicy is not a firewall for everything
+
+A common beginner mistake is thinking:
+
+"NetworkPolicy controls all network traffic."
+
+It doesn't universally work that way.
+
+NetworkPolicy primarily defines traffic controls for Pod-to-Pod and Pod-to-external endpoint traffic, depending on the policy and networking implementation.
+
+And critically:
+
+Your cluster's CNI/network plugin must support NetworkPolicy enforcement.
+
+The Kubernetes API can accept a NetworkPolicy object even if the underlying networking implementation doesn't enforce it.
+
+That's something we'll verify in your Minikube environment.
+
+4. The basic NetworkPolicy structure
+
+A NetworkPolicy looks roughly like this:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+
+metadata:
+  name: example-policy
+  namespace: dev
+
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+
+  policyTypes:
+    - Ingress
+
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+
+Let's understand every part.
+
+5. apiVersion
+apiVersion: networking.k8s.io/v1
+
+This tells Kubernetes:
+
+We're using the NetworkPolicy resource from the networking.k8s.io API group, version v1.
+
+Notice the relationship with what you learned earlier:
+
+API group:
+networking.k8s.io
+
+Version:
+v1
+
+Resource:
+NetworkPolicy
+6. kind
+kind: NetworkPolicy
+
+This tells Kubernetes what type of object we're defining.
+
+Compare:
+
+Role
+RoleBinding
+Deployment
+Service
+NetworkPolicy
+
+These are different Kubernetes resource types.
+
+7. metadata.namespace
+metadata:
+  name: example-policy
+  namespace: dev
+
+NetworkPolicies are namespaced resources.
+
+Therefore:
+
+NetworkPolicy in dev
+
+controls Pods selected within the relevant namespace.
+
+It doesn't automatically create a cluster-wide network firewall.
+
+8. The most important field: podSelector
+
+Consider:
+
+podSelector:
+  matchLabels:
+    app: backend
+
+This means:
+
+This policy applies to Pods matching app=backend.
+
+For example:
+
+metadata:
+  labels:
+    app: backend
+
+would match.
+
+But:
+
+metadata:
+  labels:
+    app: frontend
+
+wouldn't.
+
+Think:
+
+NetworkPolicy
+      │
+      ▼
+podSelector
+      │
+      ▼
+Which Pods does this policy protect?
+9. Your existing application
+
+Your Flask application is called:
+
+my-app
+
+Let's first inspect its labels instead of assuming them.
+
+Run:
+
+kubectl get pods -n dev --show-labels
+
+You should see something resembling:
+
+NAME                         LABELS
+myapp-my-app-chart-xxxxx     app.kubernetes.io/...
+
+The exact labels are important because NetworkPolicy selects Pods using labels.
+
+10. policyTypes
+
+Example:
+
+policyTypes:
+  - Ingress
+
+This says we're defining policy for incoming traffic.
+
+There are two major directions:
+
+Ingress
+   ↓
+traffic coming INTO the selected Pod
+
+Egress
+   ↓
+traffic going OUT FROM the selected Pod
+
+Visualize it like this:
+
+             INGRESS
+               ↓
+        ┌─────────────┐
+        │     Pod     │
+        └─────────────┘
+               ↓
+             EGRESS
+11. Ingress example
+
+Suppose:
+
+frontend
+   │
+   │ HTTP
+   ▼
+backend
+
+We can say:
+
+Only Pods labelled app=frontend may connect to Pods labelled app=backend.
+
+Example:
+
+ingress:
+  - from:
+      - podSelector:
+          matchLabels:
+            app: frontend
+
+The important thing is that podSelector inside from identifies the source Pods.
+
+So:
+
+policy selects:
+        backend
+
+from selects:
+        frontend
+
+Result:
+
+frontend ───────→ backend
+   ✅
+12. A subtle namespace concept
+
+Suppose:
+
+from:
+  - podSelector:
+      matchLabels:
+        app: frontend
+
+A very important point:
+
+A podSelector by itself selects Pods in the same namespace as the NetworkPolicy.
+
+So if the policy is in:
+
+dev
+
+then that selector refers to matching Pods in:
+
+dev
+
+not every namespace in the cluster.
+
+To select Pods in another namespace, you can combine:
+
+namespaceSelector:
+
+with:
+
+podSelector:
+
+We'll do that shortly.
+
+13. namespaceSelector
+
+Imagine:
+
+dev namespace
+    backend Pod
+
+frontend namespace
+    frontend Pod
+
+You might want:
+
+frontend namespace
+        │
+        ▼
+dev/backend
+
+A namespace selector can select the source namespace using labels.
+
+Conceptually:
+
+namespaceSelector:
+  matchLabels:
+    environment: frontend
+
+Then:
+
+namespaceSelector
+        ↓
+find namespace
+        ↓
+podSelector
+        ↓
+find Pods inside it
+
+This is why Kubernetes namespace labels are important for network security.
+
+14. Default-deny
+
+This is one of the most important NetworkPolicy patterns.
+
+A default-deny ingress policy can look like:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: dev
+
+spec:
+  podSelector: {}
+
+  policyTypes:
+    - Ingress
+
+Notice:
+
+podSelector: {}
+
+An empty selector means:
+
+Select all Pods in this namespace.
+
+So:
+
+dev
+ │
+ ├── frontend
+ ├── backend
+ ├── worker
+ └── database
+
+are all selected.
+
+And:
+
+policyTypes:
+  - Ingress
+
+means we're isolating their ingress traffic.
+
+This is a common security baseline pattern.
+
+15. But don't create it yet
+
+For your lab, don't apply the default-deny policy yet.
+
+Why?
+
+Your current application and monitoring stack may rely on network communication that we haven't mapped yet.
+
+We're going to learn the model first, then deliberately build a small test environment.
+
+16. NetworkPolicy mental model
+
+Remember this:
+
+NetworkPolicy
+     │
+     ├── podSelector
+     │      ↓
+     │   WHICH Pods?
+     │
+     ├── policyTypes
+     │      ↓
+     │   INGRESS / EGRESS?
+     │
+     ├── ingress
+     │      ↓
+     │   WHO can connect IN?
+     │
+     └── egress
+            ↓
+         WHERE can Pod connect OUT?
+
+That's the foundation.
+
+🧪 First lab step
+
+Before we create any policies, let's inspect your actual cluster.
+
+Run these read-only commands:
+
+kubectl get pods -n dev --show-labels
+
+Then:
+
+kubectl get networkpolicy -A
+
+Then:
+
+kubectl get pods -A -o wide
+
+And finally:
+
+kubectl get nodes -o wide
+
+We'll use the output to identify your actual Pod labels and networking environment.
+
+Then we'll build this progression:
+NetworkPolicy
+     │
+     ├── Pod selectors
+     ├── Ingress
+     ├── Egress
+     ├── Namespace selectors
+     ├── Default deny
+     ├── Allow rules
+     ├── DNS considerations
+     ├── NetworkPolicy testing
+     └── Security scenarios
+              ↓
+          kube-bench
+
+This is the next major Kubernetes security module
