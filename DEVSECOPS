@@ -15855,3 +15855,219 @@ NetworkPolicy
           kube-bench
 
 This is the next major Kubernetes security module
+
+
+
+What is Egress?
+
+Imagine your Flask application running in the dev namespace.
+
+It communicates with:
+
+DNS to resolve domain names.
+
+A database to retrieve data.
+
+External APIs to fetch information.
+
+Other Pods in the cluster.
+
+These are examples of outgoing connections initiated by your application.
+
+Egress traffic
+
+Flask application
+
+10.244.0.118
+
+Outgoing connections
+
+DNS
+
+Port 53
+
+Database
+
+Port 5432
+
+External API
+
+Port 443
+
+2. How does Kubernetes control Egress?
+
+The key is policyTypes.
+
+For example:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-egress
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+Let's understand each field.
+
+Field
+
+	
+
+Meaning
+
+kind: NetworkPolicy
+Creates a network policy object.
+
+metadata.name
+Name of the policy.
+
+metadata.namespace
+Namespace in which the policy applies.
+
+podSelector: {}
+Selects every Pod in dev.
+
+policyTypes: [Egress]
+Enables egress isolation for selected Pods.
+
+No egress: rules
+No outgoing traffic is explicitly allowed by this policy.
+
+
+
+What does this policy do?
+
+All Pods in dev
+
+Egress isolation enabled
+
+No outgoing traffic allowed
+
+This is called default-deny egress. As with ingress, there is no deny: keyword.
+
+Note that this is the intended Kubernetes NetworkPolicy behavior. Your current Minikube networking setup has not demonstrated that it enforces these policies, so we won't treat this YAML as an effective security control in your cluster yet.
+
+3. Allow only specific outgoing traffic
+
+Suppose your application needs to connect to a database on TCP port 5432, but should not initiate connections to other destinations.
+
+Here is an example:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-egress
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: myapp
+
+  policyTypes:
+    - Egress
+
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: database
+      ports:
+        - protocol: TCP
+          port: 5432
+
+Let's examine the important part:
+
+egress:
+  - to:
+      - podSelector:
+          matchLabels:
+            app: database
+    ports:
+      - protocol: TCP
+        port: 5432
+
+This allows the selected application Pods to initiate traffic to Pods labelled app=database on TCP port 5432.
+
+It doesn't allow every connection to every Pod. Also, a podSelector without a namespaceSelector selects Pods in the same namespace as the policy.
+
+Intended traffic result
+
+Database
+
+TCP 5432 allowed
+
+Other destinations
+
+Not allowed
+
+Assumes egress isolation applies and no other policy allows the traffic.
+
+4. A crucial rule: policies are additive
+
+Suppose you have two egress policies selecting the same Pod.
+
+Policy A allows traffic to the database.
+
+Policy B allows traffic to an external API.
+
+Kubernetes combines the allowed traffic from both policies. It does not make Policy B override Policy A.
+
+For a selected Pod, traffic is permitted if it matches an applicable allow rule in any policy selecting that Pod, subject to the networking implementation enforcing NetworkPolicy.
+
+Combined policy example
+
+Policy A
+
+Allows database:5432
+
+Policy B
+
+Allows API:443
+
+Combined allowed traffic
+
+Database:5432
+API:443
+
+A second policy cannot be used to deny traffic that another policy explicitly allows. Kubernetes NetworkPolicy has no explicit deny rules.
+
+5. Ingress and Egress together
+
+A Pod can be isolated in one direction without being isolated in the other.
+
+Policy types
+
+	
+
+Result
+
+
+
+
+Ingress only
+Incoming traffic is isolated.
+
+
+Egress only
+Outgoing traffic is isolated.
+
+
+Both
+Both directions are isolated.
+
+
+Neither
+Neither direction is isolated by that policy.
+
+For example:
+
+policyTypes:
+  - Ingress
+  - Egress
+
+This selects both directions for isolation. If neither ingress nor egress contains an allow rule, the policy permits neither incoming nor outgoing connections for the selected Pods.
+
+Remember that replies to permitted connections are handled as part of the connection; you don't normally need to add a separate ingress rule just to allow responses to an allowed egress connection.
