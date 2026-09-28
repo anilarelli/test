@@ -16071,3 +16071,108 @@ policyTypes:
 This selects both directions for isolation. If neither ingress nor egress contains an allow rule, the policy permits neither incoming nor outgoing connections for the selected Pods.
 
 Remember that replies to permitted connections are handled as part of the connection; you don't normally need to add a separate ingress rule just to allow responses to an allowed egress connection.
+
+
+
+Lesson: DNS and Egress in Kubernetes
+1. Why does DNS matter?
+
+Suppose your Flask application needs to connect to an external API:
+
+requests.get("https://api.example.com")
+
+Before connecting, the application needs to resolve api.example.com to an IP address. It uses DNS for this.
+
+Flask application
+
+dev namespace
+
+DNS query: UDP port 53
+
+CoreDNS
+
+kube-system namespace
+
+Returns the resolved IP address
+
+Application connects to the destination
+
+2. What happens when egress is denied?
+
+A default-deny egress policy blocks outgoing connections from selected Pods unless another policy allows them.
+
+For example:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-egress
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+This policy selects every Pod in dev and isolates them for egress.
+
+Even internal DNS queries can be blocked. Consequently, an application may fail to resolve service names, even though the destination service is healthy.
+
+3. How do we allow DNS?
+
+DNS normally uses UDP port 53. TCP port 53 is also needed for certain responses and fallback scenarios.
+
+First, inspect the DNS Pod labels in your cluster:
+
+kubectl get pods -n kube-system --show-labels
+
+Also inspect the namespace labels:
+
+kubectl get namespace kube-system --show-labels
+
+These commands help identify the correct selectors for your cluster.
+
+A typical DNS egress rule looks like this:
+
+egress:
+  - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+    ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
+Understanding the selectors
+
+namespaceSelector selects the kube-system namespace.
+
+podSelector selects DNS Pods within that namespace.
+
+Both selectors in the same peer must match.
+
+ports restricts the allowed traffic to DNS ports.
+
+This is an illustrative rule. Use the actual labels from your cluster rather than assuming they match the example.
+
+Remember that NetworkPolicies are additive: an applicable policy allowing DNS can permit it even when another policy denies all egress.
+
+4. How would you test DNS?
+
+You can inspect the DNS service:
+
+kubectl get svc -n kube-system kube-dns
+
+Then inspect the DNS Pods:
+
+kubectl get pods -n kube-system -o wide
+
+From a suitable test Pod, you can check DNS resolution with:
+
+nslookup kubernetes.default.svc.cluster.local
+
+A successful lookup confirms DNS resolution from that Pod. However, it does not, by itself, prove that a particular NetworkPolicy is being enforced.
