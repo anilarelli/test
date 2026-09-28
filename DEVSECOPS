@@ -16283,3 +16283,203 @@ A deny-all policy does not override an explicit allow in another applicable poli
 Ingress and egress isolation are independent.
 
 A connection between two isolated Pods may require permission at both ends: egress from the source and ingress to the destination.
+
+
+Kubernetes NetworkPolicy — Practical Lab
+
+Hands-on learning Beginner to intermediate
+
+Let's move from theory to practice. We'll create a small test environment, examine how NetworkPolicies work and learn how to verify whether traffic is actually blocked.
+
+Since your existing Flask application is running in dev, we'll use a separate namespace to avoid disrupting it.
+
+Our lab objectives
+
+Create an isolated namespace.
+
+Deploy a frontend and backend.
+
+Test connectivity before applying a policy.
+
+Apply a default-deny ingress policy.
+
+Test connectivity again and interpret the results.
+
+Step 1: Create a dedicated namespace
+
+Run:
+
+kubectl create namespace np-lab
+
+A namespace provides a logical boundary for Kubernetes resources. It helps us keep this experiment separate from your existing dev workload.
+
+Verify it:
+
+kubectl get namespace np-lab
+Step 2: Deploy two test applications
+
+We'll use Nginx as our backend and BusyBox as our frontend.
+
+BusyBox frontend
+
+Makes HTTP requests
+
+TCP port 80
+
+Nginx backend
+
+Receives HTTP requests
+
+Create the frontend:
+
+kubectl run frontend \
+  --image=busybox:1.36 \
+  --restart=Never \
+  --namespace=np-lab \
+  --command -- sleep 36000
+
+Create the backend:
+
+kubectl create deployment backend \
+  --image=nginx:stable \
+  --namespace=np-lab
+
+Expose the backend internally:
+
+kubectl expose deployment backend \
+  --port=80 \
+  --target-port=80 \
+  --namespace=np-lab
+
+Here, kubectl expose creates a ClusterIP Service that gives the backend a stable DNS name.
+
+Verify both Pods:
+
+kubectl get pods -n np-lab -o wide
+
+Wait until both are Running and ready before continuing.
+
+Step 3: Test connectivity before applying a policy
+
+Run:
+
+kubectl exec -n np-lab frontend -- \
+  wget -qO- --timeout=5 http://backend
+
+If everything is working, you should see the Nginx welcome page's HTML.
+
+Expected result The frontend can reach the backend on TCP port 80.
+
+This is our baseline. It tells us that connectivity works before we introduce a NetworkPolicy.
+
+Step 4: Apply a default-deny ingress policy
+
+Create a file named deny-ingress.yaml:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-deny-ingress
+  namespace: np-lab
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+
+Apply it:
+
+kubectl apply -f deny-ingress.yaml
+
+Let's understand exactly what this does.
+
+Field
+
+	
+
+Meaning
+
+
+
+
+kind: NetworkPolicy
+
+	
+
+Creates a Kubernetes network policy.
+
+
+
+
+namespace: np-lab
+
+	
+
+Limits the policy's scope to this namespace.
+
+
+
+
+podSelector
+
+	
+
+Selects the backend Pods labelled app=backend.
+
+
+
+
+policyTypes: Ingress
+
+	
+
+Makes the selected Pods ingress-isolated.
+
+
+
+
+No ingress rules
+
+	
+
+Allows no new ingress connections under this policy.
+
+Because the policy has no ingress rules, it denies incoming connections to the selected backend Pods, provided your CNI enforces NetworkPolicies.
+
+Step 5: Test connectivity again
+
+Run the same command:
+
+kubectl exec -n np-lab frontend -- \
+  wget -qO- --timeout=5 http://backend
+
+Interpret the result carefully
+
+If the request times out, that is consistent with ingress being blocked.
+
+If it succeeds, the policy may not be enforced, or another factor may explain the result.
+
+If it fails with a DNS error, investigate DNS separately.
+
+Your Minikube CNI has not yet been shown to enforce Kubernetes NetworkPolicies, so don't assume that the test will be blocked.
+
+Step 6: Inspect the policy
+kubectl describe networkpolicy backend-deny-ingress -n np-lab
+
+You should see the policy's Pod selector and ingress isolation, with no allowed ingress rules.
+
+You can also inspect the resource in YAML:
+
+kubectl get networkpolicy backend-deny-ingress \
+  -n np-lab -o yaml
+
+These commands show the configuration Kubernetes has stored. They do not independently verify packet filtering.
+
+Step 7: Clean up the lab
+
+When you've finished testing, remove the namespace:
+
+kubectl delete namespace np-lab
+
+This deletes the lab's Pods, Service, Deployment and NetworkPolicy together.
