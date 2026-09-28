@@ -16176,3 +16176,110 @@ From a suitable test Pod, you can check DNS resolution with:
 nslookup kubernetes.default.svc.cluster.local
 
 A successful lookup confirms DNS resolution from that Pod. However, it does not, by itself, prove that a particular NetworkPolicy is being enforced.
+
+
+
+Kubernetes NetworkPolicy — Lesson 3: Combining Ingress and Egress
+
+Now that we've covered ingress, egress and DNS, let's learn how to control traffic in both directions.
+
+1. Understanding the difference
+Ingress
+
+Incoming traffic
+
+Client
+
+Flask Pod
+
+Egress
+
+Outgoing traffic
+
+Flask Pod
+
+Database
+
+For example, your Flask application might need to:
+
+Accept HTTP requests on port 5000.
+
+Query CoreDNS on port 53.
+
+Connect to a database on port 5432.
+
+Ingress and egress policies control these separate traffic directions.
+
+2. Allowing ingress and egress together
+
+Imagine an application that should accept traffic from a monitoring Pod and connect only to a database.
+
+Here is an illustrative NetworkPolicy:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-traffic-policy
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels:
+      app: my-app
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: monitoring
+      ports:
+        - protocol: TCP
+          port: 5000
+
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: database
+      ports:
+        - protocol: TCP
+          port: 5432
+
+What does this policy do?
+
+Selects Pods labelled app: my-app in dev.
+
+Allows incoming TCP traffic on port 5000 from matching monitoring Pods in dev.
+
+Allows outgoing TCP traffic on port 5432 to matching database Pods in dev.
+
+Isolates selected Pods in both directions.
+
+Notice that podSelector in the ingress and egress rules refers to Pods in the policy's own namespace unless combined with a namespaceSelector.
+
+Important: This policy does not automatically allow DNS or other traffic. If the application needs DNS, you must also allow DNS egress. Similarly, the database must permit the application's incoming traffic through its own applicable policies.
+
+3. How multiple policies interact
+
+Suppose you have two policies selecting the same application Pod.
+
+Policy A allows ingress from the monitoring Pod.
+
+Policy B allows ingress from the frontend Pod.
+
+For ingress, the allowed traffic is the union of the permissions granted by both policies. Neither policy overrides the other.
+
+However, a Pod that is not selected by any ingress policy remains non-isolated for ingress, unless another policy selects it.
+
+Remember these rules
+
+Policies are additive, not sequential firewall rules.
+
+A deny-all policy does not override an explicit allow in another applicable policy.
+
+Ingress and egress isolation are independent.
+
+A connection between two isolated Pods may require permission at both ends: egress from the source and ingress to the destination.
