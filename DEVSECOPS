@@ -17070,3 +17070,452 @@ Deployment: manages the backend Pod and keeps the desired number of replicas run
 Service: gives the backend a stable network endpoint so the frontend doesn't need to know its changing Pod IP.
 
 One final distinction for our NetworkPolicy lab: the Service connects the frontend to the backend, but it doesn't grant network permission. NetworkPolicy enforcement, when supported by the CNI, independently determines whether that traffic is allowed
+
+
+
+
+Kubernetes security auditing with kube-bench
+
+We'll learn how to audit Kubernetes configuration against CIS security benchmarks, interpret audit results and understand the security implications of failed checks.
+
+
+
+
+1. What is a CIS benchmark?
+
+CIS stands for Center for Internet Security. It publishes security configuration recommendations for operating systems, cloud platforms and other technologies, including Kubernetes.
+
+A CIS Kubernetes Benchmark contains recommendations for securing components such as:
+
+API server
+
+Controller manager
+
+Scheduler
+
+etcd
+
+Kubelet
+
+Kubernetes configuration files
+
+These recommendations are organized into checks that can be evaluated against a particular Kubernetes setup.
+
+2. What is kube-bench?
+
+kube-bench
+is an open-source security auditing tool that checks whether your Kubernetes configuration follows the CIS Benchmark recommendations.
+
+kube-bench
+
+Security auditing tool
+
+Kubernetes configuration
+
+API server, kubelet, etcd and other components
+
+Audit results
+
+PASS
+
+Check passed
+
+FAIL
+
+Check failed
+
+WARN
+
+Needs review
+
+For example, kube-bench can check whether:
+
+The API server has appropriate authentication and authorization settings.
+
+The kubelet is configured with suitable authorization controls.
+
+Important configuration files have restrictive permissions.
+
+etcd is configured with appropriate access protections.
+
+It is an auditor, not an automatic security-hardening tool. It reports findings; it doesn't automatically fix them.
+
+3. How is kube-bench different from Trivy?
+
+You've already used Trivy to scan your container images. These tools address different areas of security.
+
+Feature
+
+	
+
+kube-bench
+
+	
+
+Trivy
+
+
+
+
+Primary purpose
+
+	
+
+Kubernetes configuration auditing
+
+	
+
+Vulnerability and misconfiguration scanning
+
+
+
+
+CIS checks
+
+	
+
+Kubernetes CIS benchmarks
+
+	
+
+Supports various configuration checks
+
+
+
+
+Container image vulnerabilities
+
+	
+
+No
+
+	
+
+Yes
+
+
+
+
+Kubernetes component configuration
+
+	
+
+Yes
+
+	
+
+Some related checks
+
+
+
+
+Automatic remediation
+
+	
+
+No
+
+	
+
+No
+
+
+
+
+Typical output
+
+	
+
+PASS, FAIL, WARN, INFO
+
+	
+
+Findings with severity and details
+
+For example, Trivy can identify vulnerable software packages in your Flask image. kube-bench focuses on whether Kubernetes components and their configurations follow security recommendations.
+
+4. How kube-bench works
+
+kube-bench uses benchmark definitions and tests to inspect configuration.
+
+The process is broadly:
+
+Identify the Kubernetes component
+
+For example, kubelet or API server.
+
+Select applicable benchmark checks
+
+The checks depend on the Kubernetes version and the component being audited.
+
+Inspect configuration
+
+Depending on the check, kube-bench examines configuration files, process arguments, permissions or other system information.
+
+Report the result
+
+Each check reports its outcome and often includes remediation guidance.
+
+One important detail: kube-bench needs access to the relevant configuration and host information. Running it inside an ordinary application container won't necessarily provide enough access to perform all checks.
+
+
+
+Download and inspect the kube-bench Job
+
+kube-bench needs access to the Kubernetes node's configuration files to perform many checks. We'll run it as a Kubernetes Job rather than installing it on your Kali host.
+
+First, download the official Job manifest for v0.16.0:
+
+curl -fsSLo kube-bench-job.yaml \
+  https://raw.githubusercontent.com/aquasecurity/kube-bench/v0.16.0/job.yaml
+
+This downloads the YAML file into your current directory; it doesn't run anything yet.
+
+Inspect it:
+
+cat kube-bench-job.yaml
+
+Pay particular attention to these fields:
+
+Field
+
+	
+
+Purpose
+
+
+
+
+kind: Job
+Runs kube-bench as a finite task.
+
+
+
+
+image
+Specifies the kube-bench container image.
+
+
+
+
+hostPID
+Allows the container to share the node's process namespace.
+
+
+
+
+volumeMounts
+Makes relevant node files accessible inside the container.
+
+
+
+
+volumes
+Defines the host directories mounted into the container.
+
+
+
+
+command or args
+Determines which audit checks run.
+
+The Job is privileged in terms of host visibility, so inspect the manifest before applying it. Don't modify your existing application or cluster configuration.
+
+
+
+
+
+
+
+
+
+Your manifest is the official-style kube-bench Job configuration. Let's understand what it does before running it.
+
+There are three particularly important settings in your manifest:
+
+hostPID: true gives the container access to the host's process namespace.
+
+hostPath mounts expose directories from the Minikube node to the container.
+
+readOnly: true prevents the container from writing through those particular mounts.
+
+Security observation
+
+This Job has substantial access to the Kubernetes node. Although the listed mounts are read-only, hostPID: true and the visibility of host configuration make this a privileged auditing workload. Use it only in your trusted lab.
+
+1. Understand the important parts
+
+YAML field
+
+	
+
+What it does
+
+
+
+
+apiVersion: batch/v1
+Uses the Kubernetes batch API.
+
+
+
+
+kind: Job
+Creates a finite task rather than a continuously running workload.
+
+
+
+
+metadata.name: kube-bench
+Names the Job.
+
+
+
+
+command: ["kube-bench"]
+Runs kube-bench when the container starts.
+
+
+
+
+image: docker.io/aquasec/kube-bench:v0.16.0
+Uses the specified kube-bench image and version.
+
+
+
+
+restartPolicy: Never
+Doesn't automatically restart the container after it exits.
+
+
+
+
+hostPID: true
+Shares the host's process ID namespace.
+
+
+
+
+hostPath
+Makes directories from the node available to the container.
+
+
+
+
+readOnly: true
+Mounts those directories as read-only.
+
+
+2. Why are so many host directories mounted?
+
+Each directory provides kube-bench with information it may need to inspect.
+
+Directory
+
+	
+
+Why it matters
+
+
+
+
+/etc/kubernetes
+Kubernetes control-plane configuration files
+
+
+
+
+/var/lib/etcd
+etcd data and configuration-related checks
+
+
+
+
+/var/lib/kubelet
+Kubelet configuration and data
+
+
+
+
+/etc/systemd
+System service configuration
+
+
+
+
+/lib/systemd
+System service files
+
+
+
+
+/etc/cni/net.d
+CNI configuration
+
+
+
+
+/opt/cni/bin
+CNI executable binaries
+
+
+
+
+/var/lib/cni
+CNI state
+
+
+
+
+/usr/bin
+System utilities used by certain checks
+
+
+
+Some of these paths may not exist or may not be used in your particular Minikube installation. Consequently, certain checks may be skipped or report warnings.
+
+3. One important detail before running it
+
+Your manifest doesn't specify a namespace, so Kubernetes will create the Job in your current namespace, usually default.
+
+It also doesn't explicitly specify a benchmark version. We should make the benchmark selection explicit to avoid ambiguity.
+
+For your Kubernetes v1.34.1 cluster, we can run the v0.16.0 image with the cis-1.12 benchmark.
+
+Change this:
+
+command: ["kube-bench"]
+
+to:
+
+command: ["kube-bench"]
+args: ["--benchmark", "cis-1.12"]
+
+This makes the intended benchmark clear.
+
+4. Run the audit
+
+First, create the Job:
+
+kubectl apply -f kube-bench-job.yaml
+
+Check its status:
+
+kubectl get jobs -o wide
+
+Check the Pod:
+
+kubectl get pods -l app=kube-bench -o wide
+
+When the Job finishes, retrieve the results:
+
+kubectl logs job/kube-bench
+
+The results should contain checks grouped by Kubernetes component, with outcomes such as PASS, FAIL, WARN and INFO
+
+
+
+
+
+
+
