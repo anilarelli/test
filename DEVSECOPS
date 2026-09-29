@@ -16483,3 +16483,590 @@ When you've finished testing, remove the namespace:
 kubectl delete namespace np-lab
 
 This deletes the lab's Pods, Service, Deployment and NetworkPolicy together.
+
+
+Let's break this down from the basics. There are five things to understand:
+
+Where Kubernetes downloads the images from.
+
+What kubectl run does for the frontend.
+
+What kubectl create deployment does for the backend.
+
+What BusyBox is and why we're using it.
+
+What kubectl expose does and how the frontend connects to the backend.
+
+1. Where are the images downloaded from?
+
+When you execute:
+
+kubectl run frontend \
+  --image=busybox:1.36 \
+  --restart=Never \
+  --namespace=np-lab \
+  --command -- sleep 36000
+
+Kubernetes needs a container image named busybox:1.36.
+
+An image is a packaged filesystem containing an application and the files it needs to run.
+
+In this case, the image comes from
+Docker Hub
+, which is the default container registry when you don't specify one.
+
+Your terminal
+
+kubectl run frontend
+
+Sends a request to Kubernetes API
+
+Kubernetes API server
+
+Creates the Pod specification
+
+Kubelet instructs the container runtime
+
+Minikube node
+
+Container runtime downloads the image if needed
+
+Docker Hub
+
+busybox:1.36
+
+The important distinction is that kubectl does not normally download the image to your laptop. It tells Kubernetes what to run. The container runtime on the Minikube node obtains the image.
+
+For our two commands, the images are:
+
+Component
+
+	
+
+Image
+
+	
+
+Registry
+
+
+
+
+Frontend
+
+	
+
+busybox:1.36
+
+	
+
+Docker Hub
+
+
+
+
+Backend
+
+	
+
+nginx:stable
+
+	
+
+Docker Hub
+
+If an appropriate image is already cached on the Minikube node, it may not need to download it again.
+
+2. What does kubectl run frontend do?
+
+Let's look at the command, piece by piece.
+
+kubectl run frontend \
+  --image=busybox:1.36 \
+  --restart=Never \
+  --namespace=np-lab \
+  --command -- sleep 36000
+
+Part
+
+	
+
+Explanation
+
+
+
+
+kubectl
+
+	
+
+Command-line tool to communicate with Kubernetes.
+
+
+
+
+run
+
+	
+
+Creates a Pod directly.
+
+
+
+
+frontend
+
+	
+
+Name of the Pod.
+
+
+
+
+--image=busybox:1.36
+
+	
+
+Specifies the container image to use.
+
+
+
+
+--restart=Never
+
+	
+
+Creates a standalone Pod rather than a Deployment.
+
+
+
+
+--namespace=np-lab
+
+	
+
+Creates the Pod in the np-lab namespace.
+
+
+
+
+--command
+
+	
+
+Tells kubectl to use the command that follows as the container's command.
+
+
+
+
+--
+
+	
+
+Separates kubectl options from the container command.
+
+
+
+
+sleep 36000
+
+	
+
+Keeps the container running for 36,000 seconds (10 hours).
+
+Why use kubectl run here?
+
+We only need a temporary Pod to send requests to the backend. We don't need Kubernetes to maintain multiple frontend replicas or automatically replace the Pod using a Deployment.
+
+If you create a standalone Pod and it crashes, Kubernetes won't automatically recreate it in the same way a Deployment does.
+
+3. What is BusyBox?
+
+BusyBox
+is a small collection of common Linux utilities packaged into a single executable.
+
+It is often called the Swiss Army knife of embedded Linux because it provides many basic commands in a small package.
+
+For example, BusyBox includes commands such as:
+
+Command
+
+	
+
+Purpose
+
+
+
+
+sh
+
+	
+
+Shell for executing commands
+
+
+
+
+ls
+
+	
+
+Lists files
+
+
+
+
+cat
+
+	
+
+Displays file contents
+
+
+
+
+sleep
+
+	
+
+Waits for a specified time
+
+
+
+
+wget
+
+	
+
+Downloads content or makes HTTP requests
+
+
+
+
+ping
+
+	
+
+Tests network reachability, where supported
+
+It is not a web server like Nginx. In our lab, BusyBox acts as a client that sends HTTP requests.
+
+We use it because it is lightweight and convenient for network testing.
+
+For example:
+
+kubectl exec -n np-lab frontend -- \
+  wget -qO- http://backend
+
+Here is what happens:
+
+kubectl exec runs a command inside an existing container.
+
+-n np-lab identifies the namespace.
+
+frontend identifies the Pod.
+
+-- separates kubectl's arguments from the command to execute.
+
+wget sends an HTTP request to http://backend.
+
+-q suppresses normal progress messages.
+
+-O- writes the response to standard output.
+
+The frontend is simply using BusyBox's wget to act as an HTTP client.
+
+4. Why do we use kubectl create deployment for the backend?
+
+Our command was:
+
+kubectl create deployment backend \
+  --image=nginx:stable \
+  --namespace=np-lab
+
+Let's understand each part.
+
+Part
+
+	
+
+Explanation
+
+
+
+
+kubectl
+
+	
+
+Kubernetes command-line tool
+
+
+
+
+create
+
+	
+
+Creates a Kubernetes resource
+
+
+
+
+deployment
+
+	
+
+Creates a Deployment resource
+
+
+
+
+backend
+
+	
+
+Name of the Deployment
+
+
+
+
+--image=nginx:stable
+
+	
+
+Image to run
+
+
+
+
+--namespace=np-lab
+
+	
+
+Namespace in which to create it
+
+Unlike kubectl run, this command creates a Deployment, not a standalone Pod.
+
+What happens when you create a Deployment?
+
+Deployment: backend
+
+Desired replicas: 1
+
+ReplicaSet
+
+Maintains the desired number of Pods
+
+Pod: backend
+
+Runs the Nginx container
+
+A Deployment provides several advantages:
+
+Self-healing: if its Pod is deleted or crashes, Kubernetes attempts to create a replacement.
+
+Scaling: you can increase the number of replicas.
+
+Rolling updates: you can update the container image with controlled replacement of Pods.
+
+Declarative management: Kubernetes continually tries to maintain the desired state.
+
+For our lab, a Deployment is useful because we want the Nginx backend to remain available while we experiment.
+
+You can inspect the resources it creates:
+
+kubectl get deployments -n np-lab
+kubectl get replicasets -n np-lab
+kubectl get pods -n np-lab
+
+These commands show the three levels of the Deployment hierarchy.
+
+5. Why do we need kubectl expose?
+
+Our next command was:
+
+kubectl expose deployment backend \
+  --port=80 \
+  --target-port=80 \
+  --namespace=np-lab
+
+This command creates a Kubernetes Service for the backend Deployment.
+
+First, understand the problem.
+
+When Kubernetes creates a Pod, it gets a Pod IP address. That address can change when the Pod is replaced.
+
+For example:
+
+Today's backend Pod might have IP 10.244.0.120.
+
+If the Pod is recreated, it might get 10.244.0.125.
+
+If the frontend connects directly to the Pod IP, it may stop working when that IP changes.
+
+A Service provides a stable virtual IP address and DNS name for accessing the backend.
+
+What kubectl expose creates
+
+Service: backend
+
+Stable IP and DNS name
+
+Port 80
+
+Forwards traffic to matching Pods
+
+Backend Pod
+
+Nginx listening on port 80
+
+Let's break down the two port options.
+
+Option
+
+	
+
+Value
+
+	
+
+Meaning
+
+
+
+
+--port
+
+	
+
+80
+
+	
+
+Port exposed by the Service
+
+
+
+
+--target-port
+
+	
+
+80
+
+	
+
+Port on the destination Pod
+
+In this lab, Nginx listens on port 80, so both values are 80.
+
+They don't have to be the same. For example, a Service could expose port 8080 and forward traffic to port 80 on the Pod.
+
+By default, kubectl expose creates a ClusterIP Service, which is accessible inside the cluster. It doesn't automatically make the application accessible from the public internet.
+
+6. How are the frontend and backend connected?
+
+Now let's put everything together.
+
+Frontend Pod
+
+BusyBox
+
+Runs wget
+
+Backend Service
+
+ClusterIP
+
+DNS name: backend
+
+Port: 80
+
+Backend Pod
+
+Nginx
+
+Listens on TCP port 80
+
+When you run:
+
+kubectl exec -n np-lab frontend -- \
+  wget -qO- http://backend
+
+the following happens:
+
+BusyBox's wget receives the URL http://backend.
+
+The frontend resolves backend through Kubernetes DNS. Because both Pods and the Service are in np-lab, this name resolves to the backend Service.
+
+wget establishes a TCP connection to the Service on port 80.
+
+The Service forwards the traffic to a ready backend Pod on its target port, 80.
+
+Nginx receives the HTTP request and returns its welcome page.
+
+The response travels back to the frontend.
+
+The Service handles the stable addressing and forwarding. BusyBox sends the request, and Nginx serves the response.
+
+7. Summary: All three commands compared
+
+Command
+
+	
+
+Resource created
+
+	
+
+Purpose
+
+
+
+
+kubectl run frontend ...
+
+	
+
+Pod
+
+	
+
+Creates a temporary client Pod
+
+
+
+
+kubectl create deployment backend ...
+
+	
+
+Deployment
+
+	
+
+Runs and maintains the Nginx backend Pod
+
+
+
+
+kubectl expose deployment backend ...
+
+	
+
+Service
+
+	
+
+Provides stable network access to the backend
+
+Remember these three concepts
+
+BusyBox: a lightweight Linux utility collection that we're using as a client.
+
+Deployment: manages the backend Pod and keeps the desired number of replicas running.
+
+Service: gives the backend a stable network endpoint so the frontend doesn't need to know its changing Pod IP.
+
+One final distinction for our NetworkPolicy lab: the Service connects the frontend to the backend, but it doesn't grant network permission. NetworkPolicy enforcement, when supported by the CNI, independently determines whether that traffic is allowed
