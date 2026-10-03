@@ -17573,3 +17573,586 @@ CIS compliance / configuration auditing
 security assessment / reconnaissance
 
 
+Step 1 — Install kube-hunter
+
+kube-hunter is distributed as a Python package, so we'll install it in an isolated Python environment rather than modifying your system Python.
+
+Run:
+
+python3 -m venv ~/kube-hunter-venv
+
+This creates a Python virtual environment:
+
+~/kube-hunter-venv/
+
+Activate it:
+
+source ~/kube-hunter-venv/bin/activate
+
+Your prompt should now look approximately like:
+
+(kube-hunter-venv) kali@Devsecops:~$
+
+Now install kube-hunter:
+
+pip install kube-hunter
+
+Then verify:
+
+kube-hunter --help
+Why are we using a virtual environment?
+
+This is worth understanding as a DevSecOps engineer.
+
+Without a virtual environment:
+
+System Python
+    |
+    +-- package A
+    +-- package B
+    +-- kube-hunter
+    +-- other tools
+
+Different tools can require different Python package versions and cause dependency conflicts.
+
+With a virtual environment:
+
+System Python
+     |
+     +-------------------+
+     |                   |
+kube-hunter-venv     other environment
+     |
+     +-- kube-hunter
+     +-- its dependencies
+
+So the kube-hunter dependencies are isolated.
+
+This is the same general principle you'll encounter with:
+
+Python security tools
+SAST tools
+automation scripts
+CI/CD tooling
+security testing environments
+
+
+
+Let's break this command apart:
+
+python3 -m venv ~/kube-hunter-venv
+1. What is Python?
+
+You already know Python basics, so think of:
+
+python3
+
+as:
+
+Start the Python 3 interpreter.
+
+But here we're not starting Python interactively.
+
+We're telling Python to run one of its built-in modules.
+
+2. What does -m mean?
+python3 -m venv
+
+-m means:
+
+Run a Python module as a program.
+
+So:
+
+python3 -m venv
+
+means:
+
+Python, run the venv module.
+
+venv = virtual environment.
+
+So we're asking Python:
+
+Create a Python virtual environment for me.
+
+3. What is a Python virtual environment?
+
+Imagine your computer has:
+
+System Python
+    |
+    +-- requests
+    +-- flask
+    +-- some-package
+
+Now you install kube-hunter.
+
+kube-hunter itself needs Python packages.
+
+If we install everything globally:
+
+System Python
+    |
+    +-- kube-hunter
+    +-- package A
+    +-- package B
+    +-- package C
+
+another Python tool could require a different version of package A.
+
+You can end up with:
+
+Tool A → needs package X version 1
+Tool B → needs package X version 2
+
+That's a dependency conflict.
+
+A virtual environment gives kube-hunter its own Python package environment.
+
+Think:
+
+YOUR COMPUTER
+│
+├── System Python
+│
+├── kube-hunter-venv
+│     │
+│     ├── Python environment
+│     ├── pip
+│     ├── kube-hunter
+│     └── kube-hunter dependencies
+│
+└── Other applications
+
+The important point:
+
+Installing a package inside the virtual environment doesn't normally install it into your system Python environment.
+
+4. What does ~/kube-hunter-venv mean?
+
+The ~ is shorthand for your home directory.
+
+Your username is:
+
+kali
+
+so:
+
+~
+
+roughly means:
+
+/home/kali
+
+Therefore:
+
+~/kube-hunter-venv
+
+means:
+
+/home/kali/kube-hunter-venv
+
+So:
+
+python3 -m venv ~/kube-hunter-venv
+
+means:
+
+Use Python 3's venv module to create a virtual environment at /home/kali/kube-hunter-venv.
+
+5. What actually gets created?
+
+After running it, you'll have something like:
+
+/home/kali/kube-hunter-venv/
+│
+├── bin/
+│   ├── python
+│   ├── pip
+│   └── activate
+│
+├── lib/
+│   └── python3.x/
+│       └── site-packages/
+│
+└── ...
+
+The important directories are:
+
+bin/
+
+Contains executables associated with the environment:
+
+python
+pip
+activate
+lib/.../site-packages/
+
+This is where Python packages installed into this environment live.
+
+Eventually:
+
+site-packages/
+    ├── kube_hunter/
+    ├── requests/
+    ├── ...
+6. Now why do we need to activate it?
+
+This is the part that's often poorly explained.
+
+Suppose you've created:
+
+/home/kali/kube-hunter-venv/
+
+Your normal shell still uses your system Python:
+
+python3
+   ↓
+/usr/bin/python3
+
+and system pip/environment.
+
+Creating the environment doesn't automatically tell your shell to use it.
+
+That's why we run:
+
+source ~/kube-hunter-venv/bin/activate
+7. What does source mean?
+
+source tells your current shell:
+
+Read and execute the commands contained in this file in the current shell.
+
+The file is:
+
+~/kube-hunter-venv/bin/activate
+
+That activation script modifies environment variables such as PATH.
+
+8. Why does PATH matter?
+
+Your shell needs to know where to find commands.
+
+Check your current PATH with:
+
+echo $PATH
+
+You might see something like:
+
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:...
+
+When you activate the virtual environment, the beginning of your PATH changes roughly to:
+
+/home/kali/kube-hunter-venv/bin:/usr/local/sbin:/usr/local/bin:...
+
+Notice:
+
+/home/kali/kube-hunter-venv/bin
+
+is now first.
+
+Therefore when you type:
+
+python
+
+your shell finds:
+
+/home/kali/kube-hunter-venv/bin/python
+
+before:
+
+/usr/bin/python
+
+And when you type:
+
+pip
+
+it finds:
+
+/home/kali/kube-hunter-venv/bin/pip
+9. That's why you see this
+
+Before activation:
+
+kali@Devsecops:~$
+
+After:
+
+source ~/kube-hunter-venv/bin/activate
+
+you'll normally see:
+
+(kube-hunter-venv) kali@Devsecops:~$
+
+That:
+
+(kube-hunter-venv)
+
+is basically your shell telling you:
+
+"Commands are currently using this Python virtual environment."
+
+10. What happens when we install kube-hunter?
+
+After activation:
+
+pip install kube-hunter
+
+pip installs kube-hunter into:
+
+~/kube-hunter-venv/
+
+rather than your normal system Python environment.
+
+So:
+
+System Python
+    │
+    └── remains relatively untouched
+         
+kube-hunter-venv
+    │
+    ├── kube-hunter
+    ├── dependencies
+    └── its own Python packages
+11. Do you have to activate it every time?
+
+Yes, if you open a new terminal and want to use the environment.
+
+For example, today:
+
+source ~/kube-hunter-venv/bin/activate
+kube-hunter
+
+Tomorrow you open a new terminal:
+
+kube-hunter
+
+You might get:
+
+command not found
+
+because that new shell isn't using the virtual environment.
+
+You activate it again:
+
+source ~/kube-hunter-venv/bin/activate
+
+Then:
+
+kube-hunter
+
+works.
+
+12. How do you leave the environment?
+
+Simply:
+
+deactivate
+
+Your prompt goes from:
+
+(kube-hunter-venv) kali@Devsecops:~$
+
+back to:
+
+kali@Devsecops:~$
+
+Your system isn't damaged. You're simply telling the shell:
+
+Stop using that virtual environment.
+
+
+
+
+First kube-hunter scan
+
+Before running an active scan, let's establish the target.
+
+Your Minikube node is:
+
+192.168.49.2
+
+You previously confirmed this with:
+
+kubectl get nodes -o wide
+
+We're going to assess that node only.
+
+Run:
+
+kube-hunter --remote 192.168.49.2
+What does --remote mean?
+
+It tells kube-hunter:
+
+Don't just inspect the local machine; perform its discovery against this specified remote target.
+
+In our case:
+
+Your DevSecOps machine
+        |
+        | kube-hunter
+        |
+        v
+192.168.49.2
+        |
+        +-- Kubernetes API server
+        +-- kubelet
+        +-- other exposed services
+
+This is useful because it resembles how a security engineer might assess a Kubernetes node from another machine.
+
+
+
+
+Let's not stop kube-hunter here
+
+There are two useful things to learn from this result:
+
+1. Understand what kube-hunter actually tested
+
+We ran:
+
+kube-hunter --remote 192.168.49.2
+
+That is a particular assessment mode. A security engineer needs to know what was actually tested and what wasn't before interpreting "no findings."
+
+2. Learn the difference between external and internal assessment
+
+A Kubernetes environment can look different depending on where the security tool runs:
+
+             External perspective
+
+        Attacker / Security tester
+                 |
+                 v
+          Kubernetes node
+                 |
+        exposed services
+
+versus:
+
+             Internal perspective
+
+       Pod / Kubernetes network
+                 |
+                 v
+          API Server
+          Kubelet
+          Services
+          Kubernetes metadata
+
+Something inaccessible externally may be accessible internally.
+
+That's why security assessments often have multiple perspectives.
+
+
+
+We'll run kube-hunter from inside your Kubernetes cluster.
+
+Conceptually:
+
+Your DevSecOps machine
+        |
+        | kubectl
+        v
+    Kubernetes
+        |
+        +-----------------------+
+        |                       |
+        |   kube-hunter Pod     |
+        |          |            |
+        |          v            |
+        |   Cluster network     |
+        |          |            |
+        |    +-----+------+     |
+        |    |            |     |
+        |  API Server   Kubelet |
+        |    |            |     |
+        |   Services / Nodes    |
+        +-----------------------+
+
+This is different from:
+
+kube-hunter --remote 192.168.49.2
+
+where kube-hunter was running on your normal machine.
+
+
+
+Step 1 — Create a temporary kube-hunter Pod
+
+We'll use the official kube-hunter container image rather than installing Python packages inside a normal application Pod.
+
+Run:
+
+kubectl run kube-hunter \
+  --image=aquasec/kube-hunter \
+  --restart=Never \
+  -- --pod
+
+Let's break that down:
+
+kubectl run kube-hunter
+
+Create a Pod named kube-hunter.
+
+--image=aquasec/kube-hunter
+
+Use the kube-hunter container image.
+
+--restart=Never
+
+Create a Pod, not a Deployment.
+
+--
+
+Everything after this is passed to the container's command.
+
+--pod
+
+Tell kube-hunter:
+
+Run in insider-pod mode.
+
+
+
+Step 2 — Watch it
+
+Run:
+
+kubectl get pod kube-hunter -w
+
+You should eventually see something like:
+
+kube-hunter   0/1   Completed
+
+Press Ctrl+C to stop watching.
+
+Then:
+
+kubectl logs kube-hunter
+Important
+
+Don't worry if it finds vulnerabilities or doesn't.
+
+The interesting part is that this time the scanner is genuinely running inside the cluster.
+
+We're going to compare its perspective with your previous:
+
+kube-hunter --remote 192.168.49.2
+Step 3 — Afterward, clean it up
+
+Don't delete it yet. First show me:
+
+kubectl logs kube-hunter
+
+We'll analyze the internal results together.
+
+Once we're finished:
+
+kubectl delete pod kube-hunter
+
+And then we'll move on to the next security topic.
