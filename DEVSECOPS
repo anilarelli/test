@@ -17516,6 +17516,60 @@ The results should contain checks grouped by Kubernetes component, with outcomes
 
 
 
+Your Kubernetes security path is:
 
+RBAC                  ✅
+NetworkPolicy         ✅
+kube-bench            ✅
+        ↓
+kube-hunter            ← NEXT
+        ↓
+Falco
+        ↓
+OWASP ZAP
+        ↓
+Vault
+        ↓
+Cosign / Image Signing
+        ↓
+Kyverno
+        ↓
+OPA Gatekeeper
+        ↓
+AWS / EKS Security
+Next: kube-hunter
+
+This is actually a different type of security assessment, which is valuable for you to learn.
+
+kube-bench
+
+Think:
+
+"Is my Kubernetes configuration following security best practices?"
+
+Configuration
+     ↓
+CIS benchmark
+     ↓
+PASS / FAIL / WARN
+kube-hunter
+
+Think:
+
+"Can I discover security weaknesses that may be exploitable in a Kubernetes environment?"
+
+Kubernetes environment
+        ↓
+Discovery
+        ↓
+Potential weaknesses
+        ↓
+Security findings
+
+So you'll learn the difference between:
+
+CIS compliance / configuration auditing
+                  vs
+security assessment / reconnaissance
 
 
