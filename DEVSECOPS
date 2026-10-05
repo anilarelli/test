@@ -18156,3 +18156,380 @@ Once we're finished:
 kubectl delete pod kube-hunter
 
 And then we'll move on to the next security topic.
+
+
+
+
+
+1. Normal work: run from your machine
+
+Since you already installed it in your venv:
+
+source ~/kube-hunter-venv/bin/activate
+kube-hunter --remote 192.168.49.2
+
+This is useful for an external/host perspective.
+
+2. Inside-cluster scan: temporary Pod
+
+When you specifically want to know:
+
+"What can an application running inside my Kubernetes cluster see?"
+
+then run:
+
+kubectl run kube-hunter \
+  --image=aquasec/kube-hunter \
+  --restart=Never \
+  -- --pod
+
+Then:
+
+kubectl logs kube-hunter
+
+Afterward:
+
+kubectl delete pod kube-hunter
+
+You would normally use this when you want to periodically test the internal attack surface, not for every normal kube-hunter scan.
+
+
+
+Internal compromised-workload assessment
+
+This is what we are doing now.
+
+A real security engineer wants to answer:
+
+"If one of my application containers gets compromised, what can the attacker see and access?"
+
+Aqua specifically recommends running kube-hunter inside a Pod for this perspective.
+
+For a controlled assessment, use a Kubernetes Job, rather than manually creating a long-lived Pod.
+
+For example:
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-hunter
+  namespace: security
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kube-hunter
+          image: aquasec/kube-hunter
+          command:
+            - kube-hunter
+            - --pod
+
+Then:
+
+kubectl apply -f kube-hunter-job.yaml
+
+Check it:
+
+kubectl get jobs -n security
+kubectl get pods -n security
+
+Get the result:
+
+kubectl logs -n security job/kube-hunter
+
+Then clean it up:
+
+kubectl delete job kube-hunter -n security
+
+Aqua's documentation itself describes the Pod deployment as a Job, with results retrieved from the Job's Pod logs.
+
+Why Job instead of Pod?
+
+This is an important Kubernetes concept.
+
+A Pod is the execution unit.
+
+A Job represents:
+
+"Run this workload to completion."
+
+So:
+
+Pod
+ ↓
+Run kube-hunter
+ ↓
+Finish
+
+becomes:
+
+Job
+ ↓
+creates Pod
+ ↓
+kube-hunter runs
+ ↓
+Pod completes
+ ↓
+Job records completion
+
+That's much closer to how you'd manage one-off security assessments.
+
+
+One-time setup
+
+Create a reusable Job manifest, for example:
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-hunter
+  namespace: security
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kube-hunter
+          image: aquasec/kube-hunter
+          command:
+            - kube-hunter
+            - --pod
+
+Then you can launch it with:
+
+kubectl apply -f kube-hunter-job.yaml
+
+Kubernetes creates the Pod for you.
+
+You don't manually do:
+
+kubectl run ...
+
+every time.
+
+Then:
+
+kubectl logs -n security job/kube-hunter
+But there's one more important detail
+
+A Kubernetes Job is one-shot.
+
+After it completes, you can't simply do:
+
+kubectl apply -f kube-hunter-job.yaml
+
+and expect a new scan if the same Job already exists.
+
+For repeated real-world assessments, you'd create a new Job instance each time, or automate the Job creation.
+
+For example:
+
+kubectl create job kube-hunter-$(date +%Y%m%d-%H%M) \
+  --from=job/kube-hunter-template
+
+Or, in a mature environment, schedule it with a CronJob:
+
+CronJob
+   │
+   ├── Scan 1 → Job → Pod → kube-hunter --pod
+   │
+   ├── Scan 2 → Job → Pod → kube-hunter --pod
+   │
+   └── Scan 3 → Job → Pod → kube-hunter --pod
+
+Now you aren't manually creating Pods. Kubernetes creates a fresh short-lived Pod for each scheduled scan.
+
+So the real-life model is
+YOU
+ │
+ │ trigger/schedule
+ ▼
+CronJob / Job
+ │
+ │ Kubernetes creates
+ ▼
+Pod
+ │
+ │ executes
+ ▼
+kube-hunter --pod
+ │
+ ▼
+results
+ │
+ ▼
+Pod completes
+
+That's the distinction I should have made earlier.
+
+kube-hunter --pod is the scanner command.
+The Job/CronJob is the Kubernetes mechanism that runs that command inside a Pod.
+
+
+In your lab, the real command sequence is
+
+From your workstation:
+
+kubectl create job kube-hunter-$(date +%Y%m%d-%H%M) \
+  --image=aquasec/kube-hunter \
+  -- kube-hunter --pod
+
+Then find the Pod:
+
+kubectl get pods
+
+Then read the result:
+
+kubectl logs <kube-hunter-pod-name>
+
+After the assessment, remove the Job:
+
+kubectl delete job <job-name>
+
+So you are not manually running kube-hunter --pod on your workstation.
+
+You're telling Kubernetes:
+
+"Create a temporary workload whose container executes kube-hunter --pod."
+
+Kubernetes creates the Pod, kube-hunter runs from inside the cluster, produces the report, and the workload is removed.
+
+And in an actual company?
+
+The exact trigger depends on the security program:
+
+Periodic security assessment
+        ↓
+Security Job / platform
+        ↓
+Temporary Pod
+        ↓
+kube-hunter --pod
+        ↓
+Report
+        ↓
+Cleanup
+
+It might be triggered manually during an assessment, from a security platform, or through scheduled automation.
+
+
+Step 1 — Create a temporary Pod
+kubectl run kube-hunter \
+  --image=aquasec/kube-hunter \
+  --restart=Never \
+  --command -- sleep 3600
+
+We're deliberately keeping the container alive for one hour instead of immediately running kube-hunter.
+
+Check it:
+
+kubectl get pod kube-hunter
+
+You should see:
+
+NAME          READY   STATUS    RESTARTS   AGE
+kube-hunter   1/1     Running   0          ...
+Step 2 — Enter the Pod
+kubectl exec -it kube-hunter -- /bin/sh
+
+Now your prompt should change to something similar to:
+
+/ #
+
+You are now inside the Kubernetes Pod.
+
+Your architecture is:
+
+Your terminal
+     │
+     │ kubectl exec
+     ▼
+┌──────────────────────┐
+│ kube-hunter Pod      │
+│                      │
+│  /bin/sh             │
+│                      │
+│  You are HERE ───────┤
+└──────────────────────┘
+Step 3 — Verify you're actually inside
+
+Run:
+
+hostname
+
+Then:
+
+cat /etc/hostname
+
+And:
+
+ls /var/run/secrets/kubernetes.io/serviceaccount/
+
+You should see things such as:
+
+ca.crt
+namespace
+token
+
+This is one of the things your earlier kube-hunter scan detected.
+
+Step 4 — Now run kube-hunter
+
+Inside the Pod:
+
+kube-hunter --pod
+
+Now --pod makes sense because:
+
+kube-hunter
+     │
+     ▼
+already running inside Pod
+     │
+     ▼
+--pod
+     │
+     ▼
+internal Kubernetes assessment
+Step 5 — Exit the Pod
+
+When finished:
+
+exit
+
+You'll return to your normal terminal.
+
+Then remove the temporary Pod:
+
+kubectl delete pod kube-hunter
+This is the hands-on lesson I wanted you to see
+
+Previously we were doing:
+
+kubectl run
+    ↓
+Pod
+    ↓
+kube-hunter automatically starts
+
+Now we're doing:
+
+kubectl run
+    ↓
+Pod
+    ↓
+kubectl exec -it
+    ↓
+YOU ENTER THE POD
+    ↓
+kube-hunter --pod
+
+This is a very useful Kubernetes skill beyond kube-hunter.
+
+kubectl exec is commonly used by engineers to troubleshoot containers:
+
+kubectl exec -it <pod> -- /bin/sh
+
+So I recommend doing this version once. It will make the difference between host, Pod, container, ServiceAccount, and in-cluster API access much clearer.
