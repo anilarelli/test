@@ -18990,3 +18990,258 @@ kubectl exec is commonly used by engineers to troubleshoot containers:
 kubectl exec -it <pod> -- /bin/sh
 
 So I recommend doing this version once. It will make the difference between host, Pod, container, ServiceAccount, and in-cluster API access much clearer.
+
+
+
+
+Stage 4 — Runtime Security
+
+
+
+1. What problem does Falco solve?
+So far, we've mostly looked at security before or around deployment:
+Gitleaks       → secrets
+SonarQube      → source code
+Trivy          → images / vulnerabilities
+Syft           → SBOM
+RBAC           → permissions
+NetworkPolicy  → network access
+kube-bench     → Kubernetes configuration
+kube-hunter    → attack surface
+
+Falco is different.
+Falco asks:
+"What is happening right now inside my running system?"
+
+For example, suppose your Flask Pod is normally doing:
+Flask
+ ↓
+Python
+ ↓
+Listen on port 5000
+
+Then an attacker somehow gets command execution and runs:
+/bin/sh
+
+or:
+curl http://...
+
+or accesses a sensitive file.
+Falco can observe the underlying activity and generate an alert.
+2. The important concept: system calls
+Before installing Falco, understand what it actually watches.
+Applications don't directly talk to the Linux kernel for everything.
+For example:
+Python application
+       ↓
+open()
+read()
+write()
+execve()
+connect()
+       ↓
+Linux kernel
+       ↓
+hardware / filesystem / network
+
+These kernel interactions are called system calls.
+Some examples:
+System call	General purpose
+openat()	Open/access files
+read()	Read data
+write()	Write data
+execve()	Start/execute a program
+connect()	Make network connection
+clone() / fork()	Create processes
+
+
+Falco watches this type of activity.
+Conceptually:
+             Linux
+               │
+       System calls
+               │
+               ▼
+            Falco
+               │
+          Rules engine
+               │
+        ┌──────┴──────┐
+        │             │
+    Normal         Suspicious
+        │             │
+        ▼             ▼
+      Ignore         🚨 Alert
+
+3. Why this is called runtime security
+Imagine your application image was scanned by Trivy:
+Trivy
+  ↓
+No critical vulnerabilities
+  ↓
+Deployment
+
+Everything looks good.
+But later:
+Attacker
+   ↓
+Application vulnerability
+   ↓
+Shell inside container
+   ↓
+wget attacker-server
+   ↓
+execute downloaded file
+
+The image scanner cannot see that runtime behavior.
+Falco can potentially detect suspicious behavior while it happens.
+That's why:
+Build time
+   ↓
+Trivy
+   ↓
+Runtime
+   ↓
+Falco
+
+are complementary.
+4. Where does Falco run?
+This is another important Kubernetes concept.
+Falco needs visibility into activity across the node.
+Therefore, in Kubernetes, Falco is normally deployed as a DaemonSet.
+You already know what a DaemonSet means from Kubernetes:
+Node
+ │
+ ├── Falco Pod
+ │
+ ├── Application Pod
+ │
+ ├── Application Pod
+ │
+ └── ...
+
+If you had 10 Kubernetes nodes:
+Node 1 → Falco
+Node 2 → Falco
+Node 3 → Falco
+...
+Node 10 → Falco
+
+One Falco instance per node.
+Your Minikube cluster currently has one node, so we'll have one Falco Pod.
+
+
+Our path is:
+Kubernetes
+   │
+   ├── Control Plane
+   │      ├── API Server
+   │      ├── Scheduler
+   │      ├── Controller Manager
+   │      └── etcd
+   │
+   └── Worker Node(s)
+          │
+          ├── kubelet
+          ├── container runtime
+          ├── kube-proxy
+          │
+          └── Pods
+                │
+                └── Containers
+                       │
+                       └── Applications
+
+And then:
+                 Kubernetes Cluster
+                        │
+          ┌─────────────┴─────────────┐
+          │                           │
+     Control Plane                Worker Node
+          │                           │
+    API Server                   kubelet
+    Scheduler                    container runtime
+    Controllers                  kube-proxy
+    etcd                              │
+                                      │
+                                    Pods
+                                      │
+                                  Containers
+                                      │
+                                  Applications
+
+Why this matters for Falco
+Falco is primarily concerned with what is happening at runtime on the nodes.
+For example:
+Flask container
+      │
+      │ executes
+      ▼
+   Process
+      │
+      │ makes system call
+      ▼
+    Linux Kernel
+      │
+      │
+      ▼
+     Falco
+      │
+      ├── Is this normal?
+      ├── Is a shell being spawned?
+      ├── Is a sensitive file being accessed?
+      ├── Is a suspicious process running?
+      └── Is a container behaving unexpectedly?
+
+So before installing Falco, I want you to understand one more layer: what actually exists inside a Kubernetes worker node.
+The key distinction
+Don't think:
+Kubernetes
+   ↓
+Pod
+
+Think:
+Kubernetes Cluster
+        ↓
+      Node
+        ↓
+      kubelet
+        ↓
+Container Runtime
+        ↓
+      Pod
+        ↓
+   Container
+        ↓
+   Application
+
+For your Minikube environment, there's currently one node.
+So conceptually:
+Your machine
+└── Minikube cluster
+    └── Node: minikube
+        ├── kubelet
+        ├── container runtime
+        ├── kube-proxy
+        └── many Pods
+            ├── CoreDNS
+            ├── ArgoCD
+            ├── Prometheus
+            ├── Grafana
+            ├── SonarQube
+            ├── your Flask app
+            └── etc.
+
+And this explains why Falco commonly uses a DaemonSet:
+Cluster
+│
+├── Node 1
+│    └── Falco Pod
+│
+├── Node 2
+│    └── Falco Pod
+│
+└── Node 3
+     └── Falco Pod
+
+Because Falco needs visibility into runtime activity on each node.
