@@ -758,6 +758,463 @@ Vulnerability management.
 Centralized security findings.
 
 
+
+
+The big picture
+Think of your entire setup like this:
+┌─────────────────────────────────────────────────────────────┐
+│                    KUBERNETES CLUSTER                       │
+│                                                             │
+│  A cluster = the whole Kubernetes environment               │
+│                                                             │
+│  ┌─────────────────────────┐   ┌─────────────────────────┐  │
+│  │         NODE 1          │   │         NODE 2          │  │
+│  │   (a machine/server)    │   │   (a machine/server)    │  │
+│  │                         │   │                         │  │
+│  │  Container runtime      │   │  Container runtime      │  │
+│  │      (Docker/containerd)│   │      (Docker/containerd)│  │
+│  │           │             │   │           │             │  │
+│  │     ┌─────┴─────┐       │   │     ┌─────┴─────┐       │  │
+│  │     │           │       │   │     │           │       │  │
+│  │    POD         POD      │   │    POD         POD      │  │
+│  │     │           │       │   │     │           │       │  │
+│  │  Container   Container  │   │  Container   Container  │  │
+│  │     │                   │   │     │                   │  │
+│  │   Flask app              │   │   Other app             │  │
+│  └─────────────────────────┘   └─────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+Now let's understand each box.
+1. Docker
+Docker is not inside a Pod.
+Docker is a technology for building and running containers.
+For example, you built your Flask application:
+Flask application
+      ↓
+Dockerfile
+      ↓
+Docker build
+      ↓
+Docker image
+      ↓
+Docker container
+
+You have used commands like:
+docker build
+docker run
+docker push
+
+Docker gave you the ability to package your application into a container image.
+For example:
+anilarelli/my-app:jenkins-63
+
+That is a Docker image.
+Think:
+Docker = container technology/tooling
+
+2. Container
+A container is where your application actually runs.
+For your Flask application:
+Container
+└── Python
+    └── Flask
+        └── app.py
+
+Your Flask process runs inside the container.
+So:
+Flask app
+   ↓
+runs inside
+   ↓
+Container
+
+A container is not the same thing as a Pod.
+This distinction is extremely important.
+3. Pod
+A Pod is a Kubernetes object that provides the execution environment for one or more containers.
+Usually, you'll see:
+Pod
+└── Container
+    └── Flask
+
+For your application:
+myapp-my-app-chart-5f8fdf8649-pj8r7
+        │
+        └── Container
+              │
+              └── Flask application
+
+You can check it:
+kubectl get pod -n dev
+
+And:
+kubectl describe pod <pod-name> -n dev
+
+Why does Kubernetes have Pods?
+Kubernetes doesn't directly manage your Flask process as its basic deployment unit.
+Pod is Kubernetes' basic unit for running workloads.
+A Pod gives containers things such as:
+- networking
+- IP address
+- storage volumes
+- identity/ServiceAccount
+- security context
+So think:
+Kubernetes
+    ↓
+Pod
+    ↓
+Container
+    ↓
+Application
+
+4. Node
+Now where does the Pod actually run?
+On a Node.
+A Node is a machine—physical or virtual—that provides the CPU, memory, networking, and container runtime needed to run Pods.
+Your Minikube setup has:
+Cluster
+└── Node: minikube
+    ├── Pod
+    ├── Pod
+    ├── Pod
+    └── Pod
+
+You already saw:
+kubectl get nodes
+
+and got:
+NAME       STATUS   ROLES
+minikube   Ready    control-plane
+
+So your environment currently has one Kubernetes node.
+5. Cluster
+Now go one level higher.
+A Kubernetes cluster is the complete Kubernetes environment.
+Your cluster currently looks roughly like:
+Kubernetes Cluster
+│
+└── Node: minikube
+    │
+    ├── kube-apiserver
+    ├── etcd
+    ├── scheduler
+    ├── controller-manager
+    ├── kubelet
+    │
+    ├── Pod
+    ├── Pod
+    ├── Pod
+    └── Pod
+
+So:
+Cluster
+   ↓
+Node
+   ↓
+Pod
+   ↓
+Container
+   ↓
+Application
+
+This hierarchy is the first thing I want you to memorize.
+6. Where does Kubernetes itself run?
+This is where it gets slightly more interesting.
+Kubernetes has components that manage the cluster.
+On your Minikube node you saw:
+etcd-minikube
+kube-apiserver-minikube
+kube-controller-manager-minikube
+kube-scheduler-minikube
+kube-proxy
+coredns
+
+These are Kubernetes infrastructure components.
+Very simplified:
+                 KUBERNETES CLUSTER
+                        │
+             ┌──────────┴──────────┐
+             │                     │
+        Control Plane          Worker Nodes
+             │                     │
+       ┌─────┼─────┐               │
+       │     │     │               │
+     API   etcd  Scheduler       kubelet
+                                  │
+                                  ▼
+                                 Pods
+
+Your Minikube is a single-node cluster, so the control-plane responsibilities and workload execution are on the same node.
+7. Deployment
+Now we get to something different.
+A Deployment is NOT where your Flask application runs.
+This is the mistake I want you to avoid.
+Deployment is a Kubernetes controller/object that manages Pods.
+Think:
+Deployment
+     │
+     │ creates/manages
+     ▼
+   ReplicaSet
+     │
+     │ creates
+     ▼
+    Pod
+     │
+     ▼
+ Container
+     │
+     ▼
+ Flask
+
+For example:
+replicas: 3
+
+means approximately:
+Deployment
+     │
+     ▼
+ReplicaSet
+     │
+     ├── Pod 1
+     ├── Pod 2
+     └── Pod 3
+
+The Deployment's job is essentially:
+"I want my application to have this desired state."
+
+If Pod 2 crashes:
+Pod 1 ✓
+Pod 2 ✗
+Pod 3 ✓
+
+The controller notices:
+Desired: 3
+Actual: 2
+
+and creates another Pod.
+Pod 1 ✓
+Pod 2 ✗
+Pod 3 ✓
+Pod 4 ✓
+
+That's why you don't normally manually create your application Pods.
+8. Your Flask application
+Now put everything together.
+You have:
+Flask application
+        │
+        ▼
+Dockerfile
+        │
+        ▼
+Docker image
+anilarelli/my-app:...
+        │
+        ▼
+Kubernetes Deployment
+        │
+        ▼
+ReplicaSet
+        │
+        ▼
+Pod
+        │
+        ▼
+Container
+        │
+        ▼
+Flask application
+
+So Flask is inside the container.
+The container is inside the Pod.
+The Pod is running on a Node.
+The Node belongs to the Cluster.
+The Deployment manages the Pod.
+9. Now DaemonSet
+A DaemonSet is another Kubernetes controller.
+Deployment says:
+"Give me X replicas."
+
+DaemonSet says:
+"Put one copy of this Pod on every applicable Node."
+
+For example, suppose we have:
+Cluster
+│
+├── Node 1
+│   ├── Flask Pod
+│   └── Falco Pod
+│
+├── Node 2
+│   ├── Flask Pod
+│   └── Falco Pod
+│
+└── Node 3
+    ├── Flask Pod
+    └── Falco Pod
+
+The Falco DaemonSet ensures each node gets a Falco Pod.
+So:
+DaemonSet
+    │
+    ├── Node 1 → Falco Pod
+    ├── Node 2 → Falco Pod
+    └── Node 3 → Falco Pod
+
+The DaemonSet does not contain Falco itself.
+It manages the Falco Pods.
+And inside each Falco Pod is a Falco container.
+10. Deployment vs DaemonSet
+This should now be much clearer:
+DEPLOYMENT
+
+Deployment
+    │
+    ▼
+ReplicaSet
+    │
+    ├── Pod → Flask → Container
+    ├── Pod → Flask → Container
+    └── Pod → Flask → Container
+
+Purpose:
+"I need N copies of my application."
+
+Versus:
+DAEMONSET
+
+DaemonSet
+    │
+    ├── Node 1
+    │      └── Pod → Falco → Container
+    │
+    ├── Node 2
+    │      └── Pod → Falco → Container
+    │
+    └── Node 3
+           └── Pod → Falco → Container
+
+Purpose:
+"I need one agent on every applicable node."
+
+11. Now the complete picture
+This is the diagram I want you to keep:
+                         KUBERNETES CLUSTER
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│                         NODE                                 │
+│                (machine / VM / server)                      │
+│                                                              │
+│   ┌──────────────────────────────────────────────────────┐   │
+│   │              CONTAINER RUNTIME                       │   │
+│   │       Docker / containerd / CRI-O                    │   │
+│   │                                                      │   │
+│   │   ┌────────────────┐       ┌────────────────┐       │   │
+│   │   │      POD       │       │      POD       │       │   │
+│   │   │                │       │                │       │   │
+│   │   │  Container     │       │  Container     │       │   │
+│   │   │      │         │       │      │         │       │   │
+│   │   │      ▼         │       │      ▼         │       │   │
+│   │   │    FLASK       │       │    FALCO       │       │   │
+│   │   │      APP       │       │                │       │   │
+│   │   └────────────────┘       └────────────────┘       │   │
+│   │                                                      │   │
+│   └──────────────────────────────────────────────────────┘   │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+And above those Pods are the Kubernetes controllers:
+                    KUBERNETES
+                         │
+       ┌─────────────────┼──────────────────┐
+       │                 │                  │
+       ▼                 ▼                  ▼
+  Deployment        DaemonSet           Other
+       │                 │
+       │                 │
+       ▼                 ▼
+   Flask Pods         Falco Pods
+       │                 │
+       ▼                 ▼
+   Containers         Containers
+       │                 │
+       ▼                 ▼
+   Flask app            Falco
+
+12. Where Docker fits
+This is another thing that causes confusion.
+Docker can be involved in building your image:
+app.py
+  ↓
+Dockerfile
+  ↓
+docker build
+  ↓
+Docker image
+  ↓
+Docker Hub
+
+Then Kubernetes says:
+"I need this image."
+        ↓
+Container runtime
+        ↓
+Container
+        ↓
+Pod
+
+Modern Kubernetes doesn't require Docker Engine specifically to run containers. It uses a container runtime through the Kubernetes container-runtime interface; your Minikube setup currently uses Docker as its runtime.
+So don't memorize:
+"Kubernetes runs Docker."
+
+Instead:
+Kubernetes manages Pods; a container runtime runs the containers inside those Pods
+
+
+The simplest mental model
+If everything above feels like too much, memorize this first:
+                     CLUSTER
+                        │
+                     NODE
+                        │
+                       POD
+                        │
+                    CONTAINER
+                        │
+                    APPLICATION
+
+Then remember:
+Deployment ────── manages application Pods
+DaemonSet ─────── puts one Pod on each applicable Node
+Docker ─────────── builds/runs container technology
+Kubernetes ────── orchestrates/manages the cluster
+
+
+Your Flask example
+Kubernetes Cluster
+        │
+        ▼
+    Minikube Node
+        │
+        ▼
+   Flask Pod
+        │
+        ▼
+ Flask Container
+        │
+        ▼
+   Flask app
+
+
+
+
+
+
+
+
 ### logs in real time
 
 tail -f /var/log/nginx/access.log
