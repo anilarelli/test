@@ -19520,3 +19520,189 @@ This is the mental model I want you to remember:
 
 One sentence to remember
 Kubernetes manages workloads; the container runtime runs containers; Linux runs the processes; Falco watches runtime behavior and detects suspicious activity.
+
+
+
+
+Falco — Part 1: Architecture
+Before installing anything, understand how Falco sees activity.
+1. The problem Falco solves
+Imagine your Flask application is running normally:
+Flask container
+    ↓
+python app.py
+    ↓
+Normal application activity
+
+But an attacker exploits a vulnerability and gets command execution.
+They run:
+whoami
+
+then:
+cat /etc/passwd
+
+or:
+/bin/sh
+
+Kubernetes itself may not immediately consider this a problem.
+The Pod can still be:
+STATUS: Running
+
+The Deployment can still be:
+Available: 1/1
+
+The Service can still work.
+Runtime security asks a different question:
+"What are the processes inside this container actually doing?"
+
+That's Falco's job.
+2. Falco watches runtime events
+The simplified flow is:
+Application
+     │
+     ▼
+Linux Process
+     │
+     ▼
+System Calls
+     │
+     ▼
+Linux Kernel
+     │
+     ▼
+Falco
+     │
+     ▼
+Falco Rules
+     │
+     ▼
+Alert
+
+For example:
+python
+  │
+  │ creates child process
+  ▼
+/bin/sh
+  │
+  ▼
+Falco sees the event
+  │
+  ▼
+Rule matches
+  │
+  ▼
+WARNING:
+Shell spawned in container
+
+3. What exactly is Falco looking for?
+Falco doesn't simply ask:
+"Is this Pod healthy?"
+
+That's Kubernetes' concern.
+Falco asks questions more like:
+Did a container:
+
+├── Spawn a shell?
+├── Execute an unexpected binary?
+├── Read a sensitive file?
+├── Modify a sensitive file?
+├── Access the Kubernetes API unexpectedly?
+├── Make suspicious network activity?
+├── Change permissions?
+├── Create unusual processes?
+└── Perform other suspicious runtime actions?
+
+This is why we call it runtime security.
+4. Falco Rules
+Falco doesn't alert on every single syscall.
+That would produce enormous amounts of noise.
+Instead:
+System Events
+      │
+      ▼
+    Falco
+      │
+      ▼
+   Rules
+      │
+      ├── Normal → ignore
+      │
+      └── Suspicious → alert
+
+A rule essentially describes:
+When this kind of event happens under these conditions, generate an alert.
+
+Conceptually:
+IF
+    process runs inside a container
+AND
+    process is a shell
+THEN
+    generate warning
+
+Falco has a large collection of rules designed around suspicious Linux/container/Kubernetes behavior.
+5. Falco is NOT an antivirus
+This distinction is important.
+Traditional antivirus might focus heavily on:
+File
+ ↓
+Known malware signature
+ ↓
+Malware detected
+
+Falco is much more focused on:
+Behavior
+   ↓
+Runtime event
+   ↓
+Rule
+   ↓
+Suspicious behavior detected
+
+So Falco can detect something suspicious based on what a process does, even when the specific executable isn't simply recognized as "malware."
+6. Where does Falco run?
+This connects directly to our previous DaemonSet lesson.
+Kubernetes Cluster
+│
+├── Node 1
+│    └── Falco Pod
+│
+├── Node 2
+│    └── Falco Pod
+│
+└── Node 3
+     └── Falco Pod
+
+Your Minikube currently has one node:
+Minikube Cluster
+       │
+       └── minikube Node
+               │
+               └── Falco Pod
+
+So when we install Falco, you'll likely see a Falco DaemonSet create one Falco Pod on your node.
+7. Why can't Falco simply run inside your Flask container?
+This is an excellent question to understand.
+Your Flask container is:
+Pod
+└── Flask container
+      └── python
+
+Falco needs visibility into runtime activity beyond merely being another application inside that container.
+Conceptually:
+Node
+│
+├── Flask Pod
+│    └── Flask container
+│
+├── Redis Pod
+│    └── Redis container
+│
+├── Other Pods
+│
+└── Falco Pod
+      │
+      └── observes node-level runtime activity
+
+That's why Falco is generally deployed as a node-level agent, commonly through a DaemonSet.
