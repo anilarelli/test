@@ -19245,3 +19245,278 @@ Cluster
      └── Falco Pod
 
 Because Falco needs visibility into runtime activity on each node.
+
+
+
+Lesson: What actually runs on a Kubernetes Node?
+This is the foundation for understanding Falco runtime security.
+1. Start with the Node
+A Kubernetes node is a machine.
+Inside that machine, several important components run:
+┌──────────────────────────────────────────────┐
+│                 Kubernetes Node              │
+│                                              │
+│  kubelet                                     │
+│     │                                        │
+│     ▼                                        │
+│  Container Runtime                           │
+│     │                                        │
+│     ▼                                        │
+│  Containers / Pods                           │
+│                                              │
+│  kube-proxy                                  │
+│                                              │
+│  Linux Kernel                                │
+│     ▲                                        │
+│     │                                        │
+│  Falco                                       │
+└──────────────────────────────────────────────┘
+
+Let's understand each one.
+2. kubelet
+kubelet is the agent running on every Kubernetes node.
+Its job is basically:
+"Kubernetes told me that these Pods should be running. I'll make sure they actually run."
+
+For example, your Deployment says:
+replicas: 1
+
+Kubernetes eventually tells the node:
+Run this Pod.
+
+The kubelet is responsible for making that happen on the node.
+Conceptually:
+API Server
+    │
+    │ desired state
+    ▼
+ kubelet
+    │
+    │ "I need this Pod running"
+    ▼
+Container Runtime
+
+3. Container Runtime
+The container runtime is the component that actually manages containers.
+Examples include:
+- containerd
+- CRI-O
+- Docker Engine in some setups
+Modern Kubernetes does not require Docker Engine.
+Your Minikube environment uses a container runtime underneath.
+The relationship is:
+Kubernetes
+     │
+   kubelet
+     │
+     │ CRI
+     ▼
+Container Runtime
+     │
+     ▼
+Container
+
+Important distinction
+Don't confuse:
+Docker
+
+with:
+Container
+
+Docker is a container technology/tooling ecosystem.
+A container is the actual isolated environment/process running your application.
+For example:
+Dockerfile
+    │
+    ▼
+docker build
+    │
+    ▼
+Docker Image
+    │
+    ▼
+Container
+    │
+    ▼
+Flask process
+
+Kubernetes can then use a compatible container runtime to run that container.
+4. Pod
+Now we reach the Kubernetes level.
+A Pod is the smallest deployable unit in Kubernetes.
+Usually:
+Pod
+└── Container
+
+But a Pod can also contain multiple containers:
+Pod
+├── Container A
+└── Container B
+
+The containers inside one Pod share certain networking and storage characteristics.
+For your Flask application:
+Node
+└── Pod
+    └── Flask Container
+        └── Flask process
+
+5. Container
+Inside your Flask container, there is an actual Linux process.
+For example:
+Container
+    │
+    └── python app.py
+             │
+             ▼
+        Flask process
+
+This is a very important point.
+A container isn't a tiny virtual machine.
+It's essentially an isolated Linux process environment.
+So eventually we get:
+Kubernetes Pod
+      ↓
+Container
+      ↓
+Linux Process
+      ↓
+System Calls
+      ↓
+Linux Kernel
+
+And this is where Falco becomes interesting.
+6. What is a system call?
+Suppose your Flask process wants to open a file.
+The application doesn't directly control the hardware/kernel.
+It asks the Linux kernel through a system call (syscall).
+Conceptually:
+Flask
+ │
+ │ open()
+ ▼
+Linux Kernel
+ │
+ ▼
+File
+
+If a process wants to:
+- open a file
+- create a process
+- execute another program
+- create a socket
+- communicate over the network
+- modify certain system resources
+it interacts with the kernel through system calls.
+For example, imagine an attacker somehow gets command execution inside your application container and executes:
+/bin/sh
+
+That activity ultimately involves kernel-level operations.
+7. Now Falco enters the picture
+Falco is a runtime threat detection system.
+The simplified architecture is:
+                 Kubernetes
+                     │
+                     ▼
+                  Pod
+                     │
+                     ▼
+                Container
+                     │
+                     ▼
+                Process
+                     │
+                     ▼
+               System Calls
+                     │
+                     ▼
+              Linux Kernel
+                     │
+                     ▼
+                   Falco
+                     │
+                     ▼
+                  Rules
+                     │
+             ┌───────┴────────┐
+             │                │
+          Normal          Suspicious
+             │                │
+          Ignore             Alert
+
+For example, Falco might observe behavior equivalent to:
+Container: myapp
+Process: python
+Event: shell spawned
+
+A rule could determine:
+"Shell spawned inside a container"
+        ↓
+      ALERT
+
+8. Why Falco runs as a DaemonSet
+Now everything connects.
+Suppose you have:
+Cluster
+│
+├── Node 1
+│   ├── Flask Pod
+│   ├── Redis Pod
+│   └── Falco Pod
+│
+├── Node 2
+│   ├── API Pod
+│   ├── Worker Pod
+│   └── Falco Pod
+│
+└── Node 3
+    ├── Database Pod
+    ├── API Pod
+    └── Falco Pod
+
+Why one Falco Pod per node?
+Because runtime activity happens on the nodes.
+Therefore:
+DaemonSet
+    │
+    ├── Node 1 → Falco
+    ├── Node 2 → Falco
+    └── Node 3 → Falco
+
+That's exactly what DaemonSets are good for.
+9. The complete picture
+This is the mental model I want you to remember:
+                    Kubernetes Cluster
+                           │
+                     ┌─────┴─────┐
+                     │           │
+                  Node 1       Node 2
+                     │           │
+                  kubelet     kubelet
+                     │           │
+              container runtime
+                     │
+                     ▼
+                    Pod
+                     │
+                 Container
+                     │
+                 Application
+                     │
+                  Process
+                     │
+                 System Call
+                     │
+                Linux Kernel
+                     │
+                   Falco
+                     │
+                   Rule
+                     │
+              ┌──────┴──────┐
+              │             │
+           Normal        Suspicious
+                           │
+                         Alert
+
+One sentence to remember
+Kubernetes manages workloads; the container runtime runs containers; Linux runs the processes; Falco watches runtime behavior and detects suspicious activity.
