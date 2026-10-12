@@ -19706,3 +19706,83 @@ Node
       └── observes node-level runtime activity
 
 That's why Falco is generally deployed as a node-level agent, commonly through a DaemonSet.
+
+
+Step 1: Install Falco
+We'll use the official Falco Helm chart. Since you already have Helm installed, there's no need to install it again.
+Run these commands one at a time on your Devsecops terminal.
+1. Add the official Falco Helm repository
+helm repo add falcosecurity https://falcosecurity.github.io/charts
+
+
+This registers the Falco chart repository with Helm. Helm is the package manager; the chart describes the Kubernetes resources needed to install Falco.
+2. Refresh the chart index
+helm repo update
+
+
+This downloads the latest repository metadata so Helm can find the chart version.
+
+
+
+Step 1 — Create the custom rule
+On your Devsecops machine, run:
+cat > falco-custom-values.yaml <<'EOF'
+customRules:
+  rules-passwd.yaml: |-
+    - rule: Detect Read of /etc/passwd
+      desc: Detect a process opening /etc/passwd for reading
+      condition: >
+        open_read and fd.name = /etc/passwd
+      output: >
+        /etc/passwd read detected
+        (user=%user.name process=%proc.name command=%proc.cmdline
+        file=%fd.name container=%container.info)
+      priority: WARNING
+      tags: [filesystem, host, container]
+EOF
+
+
+What this does:
+- cat > falco-custom-values.yaml creates a local YAML configuration file.
+- customRules tells the Helm chart to install our additional rule.
+- rules-passwd.yaml is the custom rule filename.
+- open_read checks for a file-open event involving a read.
+- fd.name = /etc/passwd limits the match to the exact file path.
+- output defines the information Falco prints when the rule matches.
+- priority: WARNING sets the alert severity.
+This is a detection rule, not a prevention mechanism. It won't block the file read.
+Step 2 — Apply the configuration
+Run this from the same directory where you created the file:
+helm upgrade falco falcosecurity/falco \
+  --namespace falco \
+  --reuse-values \
+  --values falco-custom-values.yaml
+
+
+Why these flags matter:
+- helm upgrade falco updates the existing Helm release named falco.
+- falcosecurity/falco identifies the chart to use.
+- --namespace falco targets the namespace where Falco is installed.
+- --reuse-values preserves the existing release settings, including your modern_ebpf driver configuration.
+- --values falco-custom-values.yaml adds our custom rule configuration.
+Step 3 — Verify that Falco loaded the rule
+First, check the rollout:
+kubectl rollout status daemonset/falco -n falco
+
+
+Then inspect the Falco logs for errors:
+kubectl logs -n falco \
+  -l app.kubernetes.io/name=falco \
+  --tail=100
+
+
+Look for rule-loading or configuration errors. If the rollout or rule loading fails, stop here and share the output.
+Step 4 — Test the detection
+Open one terminal and follow Falco's logs:
+kubectl logs -n falco \
+  -l app.kubernetes.io/name=falco \
+  -f
+
+
+In a second terminal, trigger a read of the file on your Minikube node:
+minikube ssh -- sudo cat /etc/passwd
