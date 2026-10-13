@@ -19805,3 +19805,71 @@ process=curl	The process associated with the event.
 file=/etc/passwd	The file path that matched the rule.
 k8s_pod_name	The Kubernetes Pod associated with the event.
 k8s_ns_name	The namespace associated with the Pod.
+
+
+
+
+
+
+
+Stage 5 — OWASP ZAP DAST
+
+
+
+
+Step 1 — Create a Kubernetes Job for ZAP
+Run this command on your Devsecops machine:
+kubectl create namespace zap
+
+
+If the namespace already exists, that's fine; continue to the next step.
+Now create the scanner Job:
+kubectl create job zap-baseline \
+  -n zap \
+  --image=ghcr.io/zaproxy/zaproxy:stable \
+  -- zap-baseline.py \
+  -t http://myapp-my-app-chart.dev.svc.cluster.local \
+  -r zap-report.html
+
+
+What each part means
+Part	Meaning
+kubectl create job	Creates a Kubernetes Job that runs a task to completion.
+zap-baseline	Name of our scan Job.
+-n zap	Runs the Job in the dedicated zap namespace.
+--image=...	Uses the official ZAP container image.
+zap-baseline.py	Starts ZAP's baseline scan.
+-t	Specifies the target URL.
+-r zap-report.html	Generates an HTML report inside the scanner container.
+The Service DNS name points to your existing Flask Service, so we don't need to expose ZAP or change your Ingress.
+Step 2 — Watch the scan
+kubectl get pods -n zap -w
+
+
+Wait for the Pod to finish. Press Ctrl+C after it reaches Completed or Error.
+Then retrieve the logs:
+kubectl logs -n zap job/zap-baseline
+
+
+Important: This first command produces the report inside the scanner container. We'll retrieve it from Kubernetes in the next step if the scan succeeds.
+
+
+kubectl exec -n zap <pod-name> -- ls -l /zap/wrk/zap.html
+
+kubectl logs -n zap job/zap-report > zap-report.html
+kubectl logs -n zap job/zap-report > zap-report.txt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
