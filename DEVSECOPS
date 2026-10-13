@@ -19863,12 +19863,46 @@ kubectl logs -n zap job/zap-report > zap-report.txt
 
 
 
+Then create the corrected Job:
+cat > zap-job.yaml <<'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zap-report
+  namespace: zap
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: zap
+          image: ghcr.io/zaproxy/zaproxy:stable
+          args:
+            - zap-baseline.py
+            - -t
+            - http://myapp-my-app-chart.dev.svc.cluster.local
+            - -r
+            - zap.html
+          volumeMounts:
+            - name: zap-work
+              mountPath: /zap/wrk
+      volumes:
+        - name: zap-work
+          emptyDir: {}
+EOF
+
+
+
+kubectl apply -f zap-job.yaml
 
 
 
 
+kubectl logs -n zap job/zap-report
 
 
+kubectl delete job zap-report -n zap
 
 
 
