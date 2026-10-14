@@ -20009,11 +20009,40 @@ You'll see the alert rules and their current states:
 
 
 
+Understand the three states
+
+Inactive
+Condition false
+The alert rule is being evaluated, but its condition is not currently met.
+Example: CPU usage is below the configured threshold.
 
 
 
 
+Pending
+Waiting period
+The condition is met, but the rule's for duration has not elapsed.
+Example: CPU usage is high, and the rule requires it to remain high for five minutes.
 
 
+
+
+Firing
+Condition triggered
+The condition has persisted for the required duration. Prometheus has triggered the alert.
+
+
+
+
+Open Alertmanager locally
+You already have an Alertmanager Pod running in Kubernetes. We can access it through a temporary port-forward, just as we did with Prometheus.
+Open a second terminal and run:
+kubectl port-forward svc/monitoring-kube-prometheus-alertmanager 9093:9093
+
+
+What each part means:
+- kubectl port-forward — creates a temporary connection from your computer to a Kubernetes Service.
+- svc/monitoring-kube-prometheus-alertmanager — identifies the Alertmanager Service.
+- 9093:9093 — maps port 9093 on your computer to port 9093 on the Service.
 
 
