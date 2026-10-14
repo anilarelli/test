@@ -19907,3 +19907,113 @@ kubectl delete job zap-report -n zap
 
 
 
+
+
+
+
+Stage 6 — Item 13: Prometheus Alerting
+
+First, understand what we're building.
+Your Kubernetes application
+Produces metrics: CPU, memory, request failures
+
+Prometheus
+Collects metrics and evaluates alert rules
+
+Alertmanager
+Groups and routes notifications when configured
+
+
+For example, we could create an alert when an application's error rate becomes too high. Prometheus detects the condition; Alertmanager can route the resulting notification to a configured destination.
+
+
+
+
+
+Step 1 — Discover your existing setup
+Before installing or modifying anything, we need to establish which monitoring components already exist.
+Run:
+kubectl get pods -A | grep -Ei 'prometheus|grafana|alertmanager'
+
+
+Why this command?
+- kubectl: communicates with your Kubernetes cluster.
+- get pods: lists the running and non-running application units called Pods.
+- -A: searches across all namespaces, not just the current one.
+- |: passes the command's output to another command.
+- grep -Ei: filters for matching names, ignoring case.
+
+
+
+
+Understanding your monitoring stack
+Component	Current status	Purpose
+Prometheus	Running	Collects metrics and evaluates alert rules
+Alertmanager	Running	Groups, routes, and manages alert notifications
+Grafana	Running	Visualizes metrics and dashboards
+Prometheus Operator	Running	Manages Prometheus-related Kubernetes resources
+Node Exporter	Running	Exposes Linux host metrics such as CPU, memory, and disk
+
+
+
+
+
+
+Step 2 — Check whether alert rules already exist
+Before creating a new rule, we need to inspect your existing configuration to avoid duplicating work.
+Run:
+kubectl get prometheusrules -A
+
+
+Why this command?
+Your installation uses the Prometheus Operator. It supports a Kubernetes resource called PrometheusRule, which stores alerting and recording rules in declarative YAML.
+- kubectl get: lists resources.
+- prometheusrules: asks Kubernetes for resources of this specific type.
+- -A: checks every namespace.
+This command is read-only. It will show us whether alert rules already exist, their names, and their namespaces. It won't show the full rule definitions yet.
+
+
+
+
+
+Next step — Show only alert names
+Instead of printing the full YAML, run:
+kubectl get prometheusrules -n default -o yaml | grep -E '^[[:space:]]+- alert:'
+
+
+This extracts lines defining alert names, making the output much shorter.
+Once we see the names, we'll identify what's already covered and choose one useful alert to learn hands-on. We won't change any existing rules.
+
+
+
+Step 4 — Check live alert status
+Instead of reading more YAML, let's query Prometheus itself.
+Run:
+kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090
+
+
+What does this command do?
+- kubectl port-forward creates a temporary connection from your machine to a Kubernetes service.
+- svc/monitoring-kube-prometheus-prometheus identifies your existing Prometheus Service.
+- 9090:9090 maps local port 9090 to the Service's port 9090.
+This lets you open Prometheus locally without exposing it publicly or changing your cluster configuration.
+Keep this terminal open. Then open http://localhost:9090/alerts in your browser.
+You'll see the alert rules and their current states:
+- Inactive: the alert condition is not currently met.
+- Pending: the condition is met, but its configured waiting period hasn't elapsed.
+- Firing: the condition has been met long enough to trigger the alert.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
