@@ -20046,3 +20046,68 @@ What each part means:
 - 9093:9093 — maps port 9093 on your computer to port 9093 on the Service.
 
 
+Next concept: How does an alert become a notification?
+You already know that Prometheus evaluates rules and Alertmanager receives alerts. Now we need to understand whether Alertmanager is configured to deliver notifications.
+
+
+
+
+
+Item 13: Prometheus Alerting — Notification routing
+We already confirmed that Prometheus and Alertmanager are running, and you've inspected an alert. Now we'll check where Alertmanager sends alerts and whether notification delivery is configured.
+First, understand the difference:
+- Prometheus alert rule: detects a condition, such as a failed Kubernetes Job.
+- Alertmanager route: decides which receiver should handle the alert.
+- Receiver: defines a notification destination, such as email, Slack, or a webhook.
+- Delivery: depends on the receiver's configuration and connectivity. Seeing an alert in the UI doesn't prove a notification was delivered.
+
+
+
+
+Step 1 — Find the existing Alertmanager configuration
+Open your terminal and run:
+kubectl get secrets,configmaps -n default | grep -i alertmanager
+
+
+What does this command do?
+- kubectl get: lists Kubernetes resources.
+- secrets,configmaps: searches two resource types that commonly store application configuration.
+- -n default: checks the namespace where your monitoring stack is running.
+- grep -i alertmanager: filters the results for names containing alertmanager, ignoring case.
+
+
+
+
+Step 2 — Inspect notification routing safely
+The Prometheus Operator also exposes the configuration through the Alertmanager resource. Let's first check whether that resource exists.
+Run:
+kubectl get alertmanager -n default
+
+
+Why this command?
+- alertmanager is the custom Kubernetes resource managed by the Prometheus Operator.
+- It describes the Alertmanager deployment and configuration relationship.
+- This command only lists the resource; it does not expose Secret contents or modify anything.
+
+
+
+Step 3 — Inspect the configured receivers
+We'll ask the Prometheus Operator to show the Alertmanager resource's configuration reference. Run:
+kubectl get alertmanager monitoring-kube-prometheus-alertmanager -n default -o yaml
+
+
+Why are we doing this?
+- get alertmanager: retrieves the existing Alertmanager custom resource.
+- The resource name identifies your exact instance.
+- -o yaml: displays its configuration fields in YAML format.
+This output should show how the resource references its configuration Secret. It generally does not show the full active routing configuration, because that configuration is stored separately.
+
+
+
+
+
+
+
+
+
+
