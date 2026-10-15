@@ -20106,8 +20106,23 @@ This output should show how the resource references its configuration Secret. It
 
 
 
+Step 4 — Check for additional Alertmanager configurations
+Run this read-only command:
+kubectl get alertmanagerconfigs -A
+
+
+What does it do?
+- alertmanagerconfigs lists the custom resources that can define routes and receivers for Alertmanager.
+- -A searches every namespace.
+Why check this first? We want to find out whether notification routing has already been configured through these resources before inspecting the generated configuration.
 
 
 
 
-
+Step 1 — Choose the email provider
+Before changing Kubernetes, we need four pieces of information:
+1. SMTP server: the mail server Alertmanager will connect to.
+2. SMTP port: usually 587 for STARTTLS or 465 for implicit TLS.
+3. Sender and recipient addresses: the account sending alerts and the inbox receiving them.
+4. SMTP credentials: an app password or other supported SMTP authentication credential, if your provider requires it.
+Alertmanager's email receiver uses SMTP settings such as smtp_smarthost, smtp_from, authentication details, and to. TLS should remain enabled for remote SMTP connections
