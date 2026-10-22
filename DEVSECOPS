@@ -20126,3 +20126,104 @@ Before changing Kubernetes, we need four pieces of information:
 3. Sender and recipient addresses: the account sending alerts and the inbox receiving them.
 4. SMTP credentials: an app password or other supported SMTP authentication credential, if your provider requires it.
 Alertmanager's email receiver uses SMTP settings such as smtp_smarthost, smtp_from, authentication details, and to. TLS should remain enabled for remote SMTP connections
+
+
+
+
+
+
+
+Stage 6 → Step 14: Loki — Centralized Logging.
+
+
+
+
+Step 14.1 — Understand Loki
+What problem does Loki solve?
+Your Kubernetes lab runs multiple components: Flask, Jenkins, ArgoCD, Prometheus and other services. When something fails, each component produces its own logs.
+
+
+
+
+If the application crashes, you need to find the relevant logs. Checking every Pod manually becomes tedious.
+
+Loki centralizes logs so you can search them from Grafana.
+Kubernetes Pods
+
+Flask · Jenkins · ArgoCD · Other workloads
+
+Log collector
+
+Collects and forwards container logs
+
+Loki
+
+Stores and indexes log labels for querying
+
+Grafana
+
+Search, filter and investigate logs with LogQL
+
+
+Loki vs Prometheus
+Prometheus									Loki
+Collects time-series metrics				Stores and queries logs
+Answers: “How much CPU is used?”			Answers: “What error did the application log?”
+Uses PromQL										Uses LogQL
+Example: request rate						Example: HTTP 500 errors
+
+They complement each other: Prometheus can reveal that an application is failing, while Loki can help explain why.
+
+
+Step 1 — Install Loki
+We’ll start with Loki only. First, create a dedicated namespace and install Loki using its single-binary deployment mode.
+
+Run:
+kubectl create namespace logging
+
+
+Then install Loki:
+helm install loki grafana/loki \
+  --namespace logging \
+  --set deploymentMode=SingleBinary \
+  --set loki.auth_enabled=false \
+  --set singleBinary.replicas=1 \
+  --set read.replicas=0 \
+  --set write.replicas=0 \
+  --set backend.replicas=0 \
+  --set loki.commonConfig.replication_factor=1 \
+  --set loki.storage.type=filesystem \
+  --set loki.schemaConfig.configs[0].from=2024-04-01 \
+  --set loki.schemaConfig.configs[0].store=tsdb \
+  --set loki.schemaConfig.configs[0].object_store=filesystem \
+  --set loki.schemaConfig.configs[0].schema=v13 \
+  --set loki.schemaConfig.configs[0].index.prefix=loki_index_ \
+  --set loki.schemaConfig.configs[0].index.period=24h
+
+
+Why these settings? This is a single-node learning lab, so one Loki replica and filesystem storage keep the setup simple. Authentication is disabled for this internal lab; don't expose Loki publicly.
+
+
+Step 2 — Check the replica settings
+Run this one command:
+helm show values grafana/loki | grep -n -A 8 -B 3 'replicas:'
+
+
+We need to identify the default replica counts for singleBinary, read, write, and backend so we can disable the conflicting components correctly.
+
+helm list -n logging
+kubectl get pods -n logging
+
+
+Step 15 — Install Grafana Alloy
+Run:
+helm install alloy grafana/alloy \
+  --namespace logging \
+  --set alloy.clustering.enabled=false
+
+
+This installs Alloy, but it does not yet guarantee that logs are being collected. We'll configure its log discovery and forwarding after the installation.
+\
+
+Then check:
+kubectl get pods -n logging
