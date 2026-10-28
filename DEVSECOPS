@@ -20227,3 +20227,124 @@ This installs Alloy, but it does not yet guarantee that logs are being collected
 
 Then check:
 kubectl get pods -n logging
+
+
+Run this command to open the existing Alloy configuration:
+helm get values alloy -n logging -a
+
+
+
+Now we have the exact configuration. Alloy is installed, but log collection is not configured yet: alloy.configMap.content is empty, and both alloy.mounts.varlog and alloy.mounts.dockercontainers are disabled.
+
+
+Let's configure Alloy to discover Kubernetes pods, read their container logs through the Kubernetes API, and send them to Loki. This avoids needing host log-file mounts for this initial setup.
+
+
+
+Step 16 — Configure Alloy
+Create a configuration file:
+
+
+
+cat > alloy-config.alloy <<'EOF'
+discovery.kubernetes "pods" {
+  role = "pod"
+}
+
+discovery.relabel "pod_logs" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+}
+
+loki.source.kubernetes "pod_logs" {
+  targets    = discovery.relabel.pod_logs.output
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki-gateway.logging.svc.cluster.local/loki/api/v1/push"
+  }
+}
+EOF
+
+
+
+Apply it to Alloy using Helm:
+helm upgrade alloy grafana/alloy \
+  --namespace logging \
+  --reuse-values \
+  --set-file alloy.configMap.content=alloy-config.alloy
+
+
+
+
+This uses the existing Alloy release and preserves its other values. The configuration discovers pods across namespaces and forwards their logs to the Loki gateway.
+
+Important: This configuration uses Kubernetes API log streaming. We still need to verify Alloy starts successfully and that Loki actually receives logs before considering the step complete.
+
+
+
+Step 17 — Check Alloy's configuration and startup
+Run this command:
+kubectl logs -n logging -l app.kubernetes.io/name=alloy --all-containers=true --tail=60
+
+
+
+
+
+Step 18 — Query logs from Loki
+Run this command to open a local port-forward to the Loki gateway:
+kubectl port-forward -n logging svc/loki-gateway 3100:80
+
+
+
+kubectl get svc monitoring-grafana -n default
+
+
+Next step — Access Grafana
+Run this command and keep the terminal open:
+kubectl port-forward -n default svc/monitoring-grafana 3000:80
+
+
+Then open this URL in your browser on the same machine:
+
+http://localhost:3000
+
+
+
+
+Step 21 — Add Loki as a Grafana data source
+In Grafana at http://localhost:3000:
+1. Open Connections → Data sources.
+2. Click Add new data source.
+3. Select Loki.
+4. Set the URL to:
+http://loki-gateway.logging.svc.cluster.local
+
+
+5. Scroll down and click Save & test.
+
+Important: That URL is reachable from inside the Kubernetes cluster, but your Grafana pod is inside the cluster too, so it is the correct URL for this setup.
+
+You should see a successful connection message. Then go to Explore, select Loki, and run:
+{namespace="logging"}
+
+
+
+
+
