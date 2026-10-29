@@ -20347,4 +20347,51 @@ You should see a successful connection message. Then go to Explore, select Loki,
 
 
 
+Stage 7 — Secrets
+│
+└── 15. HashiCorp Vault    
 
+
+
+
+Why do we need HashiCorp Vault?
+Before we install anything, let's understand the security problem we're solving.
+
+Imagine your Flask application in your existing Kubernetes lab has a /secret endpoint that reads SECRET_TOKEN from an environment variable.
+1. The problem: where do secrets live?
+Method 1: Hardcode the secret
+SECRET_TOKEN = "my-super-secret"
+
+
+
+Anyone who can read the source code may see the secret.
+
+
+
+Method 2: Store it in a Kubernetes YAML file
+env:
+  - name: SECRET_TOKEN
+    value: "my-super-secret"
+
+
+The secret can leak through Git repositories, configuration files, or access to deployment manifests.
+
+
+
+Method 3: Use a Kubernetes Secret
+
+This is better than hardcoding credentials, but Kubernetes Secrets are not automatically encrypted at rest in every configuration. Base64 encoding is not encryption.
+
+
+
+2. How Vault helps
+HashiCorp Vault
+
+Stores and controls access to sensitive information
+
+Kubernetes application
+
+Authenticates and retrieves only the secrets it is authorized to access
+
+
+Vault can provide centralized secret storage, access policies, audit logs, and short-lived credentials where supported. It doesn't automatically protect a secret that an application has already exposed.
