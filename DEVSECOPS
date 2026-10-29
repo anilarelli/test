@@ -20395,3 +20395,84 @@ Authenticates and retrieves only the secrets it is authorized to access
 
 
 Vault can provide centralized secret storage, access policies, audit logs, and short-lived credentials where supported. It doesn't automatically protect a secret that an application has already exposed.
+
+
+
+Add the HashiCorp Helm repository
+What is Helm? You already used Helm to install Loki and Alloy. Helm is a package manager for Kubernetes; it helps install and manage applications using charts.
+
+Vault also provides an official Helm chart.
+
+Run this command:
+helm repo add hashicorp https://helm.releases.hashicorp.com
+
+
+Then update the repository index:
+helm repo update
+
+
+Verify that Helm can find the Vault chart:
+helm search repo hashicorp/vault
+
+
+You should see a chart named hashicorp/vault with a version number.
+
+
+
+
+
+Step 3 — Install Vault in development mode
+For your Minikube lab, we'll use standalone Vault with file storage. This is suitable for learning, but not a production configuration.
+
+We'll install it in a separate vault namespace so your existing monitoring and logging components remain isolated.
+
+Run:
+kubectl create namespace vault
+
+
+Then install Vault:
+helm install vault hashicorp/vault \
+  --namespace vault \
+  --set "server.dev.enabled=true" \
+  --set "ui.enabled=true"
+
+
+What these options mean
+- helm install vault: creates a Helm release named vault.
+- hashicorp/vault: uses the chart you just found.
+- --namespace vault: keeps Vault resources in their own namespace.
+- server.dev.enabled=true: starts Vault in development mode, automatically initialized and unsealed, for lab exercises.
+- ui.enabled=true: enables the Vault web interface.
+Important: Development mode is intentionally insecure. It uses an ephemeral development setup and must not be used for real secrets or production workloads.
+
+Once the command finishes, check the status:
+kubectl get pods -n vault
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
