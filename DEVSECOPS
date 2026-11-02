@@ -20626,6 +20626,150 @@ Important details:
 
 
 
+2. Understand secret versioning
+Let's update the password to simulate credential rotation.
+
+Run:
+kubectl exec -n vault vault-0 -- vault kv put secret/myapp \
+  username="devsecops_user" \
+  password="NewLabPassword456!"
+
+
+Now retrieve the secret:
+kubectl exec -n vault vault-0 -- vault kv get secret/myapp
+
+
+You should see version 2.
+
+Then retrieve the previous version:
+kubectl exec -n vault vault-0 -- vault kv get -version=1 secret/myapp
+
+
+This should return the original password.
+3. What did you just learn?
+This is one of the useful features of KV v2:
+- Store secrets.
+- Update secrets.
+- Maintain version history.
+- Retrieve previous versions.
+- Recover from accidental updates.
+Next lesson: Vault policies and access control. We'll create a restricted user/application identity that can read secret/myapp but cannot access other secrets or perform administrative operations.
+
+
+Next: Lesson 3 — Vault Policies and Access Control
+This is where Vault becomes particularly important for DevSecOps.
+
+Currently, you're using the root token, which has full administrative access. In production, applications should never use this token.
+
+We'll create a policy with these permissions:
+Operation	Permission
+Read secret/myapp	Allowed
+Update secret/myapp	Denied
+Delete secret/myapp	Denied
+Read other application secrets	Denied
+Manage Vault	Denied
+
+Step 1 — Create a policy file
+On your Linux terminal:
+nano myapp-read.hcl
+
+
+Paste:
+path "secret/data/myapp" {
+  capabilities = ["read"]
+}
+
+
+Save with Ctrl + O, Enter, then exit with Ctrl + X.
+
+What does this mean?
+- path: identifies which Vault API path the policy controls.
+- secret/data/myapp: the KV v2 data endpoint for your application secret.
+- capabilities = ["read"]: permits reading, but not writing or deleting.
+
+
+
+
+
+Step 2 — Register the policy
+Run:
+kubectl cp myapp-read.hcl vault/vault-0:/tmp/myapp-read.hcl
+
+
+What does kubectl cp do?
+
+It copies a file between your local machine and a Kubernetes pod.
+- myapp-read.hcl: your local policy file.
+- vault/vault-0: the Vault pod in the vault namespace.
+- /tmp/myapp-read.hcl: destination inside the pod.
+Now register the policy:
+kubectl exec -n vault vault-0 -- vault policy write myapp-read /tmp/myapp-read.hcl
+
+
+Verify it:
+kubectl exec -n vault vault-0 -- vault policy read myapp-read
+
+
+Expected policy:
+path "secret/data/myapp" {
+  capabilities = ["read"]
+}
+
+
+
+
+
+Step 3 — Create a restricted token
+Currently, you're using the root token. We'll create a separate token with only the myapp-read policy.
+
+Run:
+kubectl exec -n vault vault-0 -- vault token create -policy="myapp-read"
+
+
+You should receive output containing:
+token       hvs....
+policies    [default myapp-read]
+
+
+Important concepts:
+- vault token create: generates a new authentication token.
+- -policy="myapp-read": attaches your restricted policy.
+- default: Vault's default policy, which provides basic self-token operations.
+
+
+
+
+Step 4 — Test read access
+Replace YOUR_RESTRICTED_TOKEN with the token you just generated.
+
+Run:
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN="YOUR_RESTRICTED_TOKEN" vault kv get secret/myapp'
+
+
+Expected: Success — it should display your application credentials.
+Step 5 — Test unauthorized access
+Try reading a different secret:
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN="YOUR_RESTRICTED_TOKEN" vault kv get secret/anotherapp'
+
+
+Expected: 403 permission denied.
+Step 6 — Test write restriction
+Try updating your application secret:
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN="YOUR_RESTRICTED_TOKEN" vault kv put secret/myapp password="UnauthorizedChange"'
+
+
+Expected: 403 permission denied.
+What we're validating
+Test	Expected result
+Read myapp	Allowed
+Read anotherapp	Denied
+Update myapp	Denied
+
+Security note: The token is a credential. Don't share it here or commit it to Git. The commands above pass it as a process argument inside the pod, which is acceptable for this disposable lab exercise but not a production credential-handling pattern.
+
+
+
+
 
 
 
