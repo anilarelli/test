@@ -20771,7 +20771,16 @@ Security note: The token is a credential. Don't share it here or commit it to Gi
 
 
 
-
+What you've completed
+Task										Result
+Installed Vault on Minikube					Done
+Initialized and unsealed Vault				Done
+Verified KV v2								Done
+Stored and retrieved secrets				Done
+Tested secret versioning					Done
+Created a read-only policy					Done
+Created a restricted token					Done
+Verified allowed and denied operations		Done
 
 
 
