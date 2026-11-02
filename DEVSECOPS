@@ -20453,15 +20453,175 @@ kubectl get pods -n vault
 
 
 
+Step 4 — Check Vault status
+Run:
+kubectl exec -n vault vault-0 -- vault status
+
+
+Because we enabled development mode, Vault should normally show:
+- Initialized: true
+- Sealed: false
+- Storage Type: in-memory
+Important: In-memory storage is temporary. Secrets can disappear when the Vault process restarts, which is acceptable for this development exercise.
 
 
 
 
 
 
+Step 4 — Understanding your Vault status
+	Parameter		Your output		Meaning
+Seal Type			shamir			Uses Shamir's Secret Sharing
+Initialized			true			Vault has been initialized
+Sealed				false			Vault is unlocked and operational
+Total Shares		1				One unseal-key share in this dev setup
+Threshold			1				One share is sufficient
+Storage Type		inmem			Data is stored in memory
+HA Enabled			false			No high availability
 
 
 
+One important production distinction: Total Shares: 1 and Threshold: 1 are development-mode defaults, not a recommended production key-management configuration.
+
+
+
+
+Step 5 — Access the Vault CLI
+We'll execute Vault commands inside the running pod.
+
+First, check the Vault address:
+kubectl exec -n vault vault-0 -- sh -c 'echo $VAULT_ADDR'
+
+
+Then check authentication:
+kubectl exec -n vault vault-0 -- vault token lookup
+
+
+In development mode, Vault automatically provides a root token for convenience.
+
+What is a root token?
+
+Think of it as an administrator key. It has extensive privileges over Vault, including managing secrets, policies, and authentication methods.
+
+Never use a root token for ordinary application access in production.
+
+
+
+
+Let's understand two important details.
+1. VAULT_ADDR
+http://127.0.0.1:8200
+
+
+- 127.0.0.1 means localhost, from inside the Vault pod.
+- 8200 is Vault's default API port.
+- Applications communicate with Vault through this API.
+2. Root token
+Your output shows:
+policies [root]
+ttl      0s
+renewable false
+
+
+This means:
+- root: full administrative privileges.
+- ttl 0s: no expiration.
+- renewable false: this token cannot be renewed.
+Keep this token confined to the lab. Never put it in GitHub, application code, or CI/CD configuration.
+Step 6 — Understand the KV secrets engine
+Vault supports different secrets engines. Think of them as modules that manage different types of secrets.
+Secrets engine	Purpose
+KV	Store passwords, API keys and tokens
+Database	Generate database credentials
+AWS	Generate AWS credentials
+PKI	Issue certificates
+SSH	Manage SSH access
+
+We'll start with KV version 2.
+
+First, check whether KV is already enabled:
+kubectl exec -n vault vault-0 -- vault secrets list
+
+
+Look for:
+secret/    kv
+
+Step 7 — Check KV version
+Run:
+kubectl exec -n vault vault-0 -- vault secrets list -detailed
+
+
+Look for the secret/ entry and its options field.
+
+We want to confirm:
+version=2
+
+
+Why does KV version matter?
+KV v1	KV v2
+Stores secrets	Stores secrets
+No built-in secret version history	Maintains secret versions
+No soft-delete recovery	Supports soft delete and undelete
+Simpler API	Separate data and metadata API paths
+
+KV v2 is particularly useful because you can update a password and retain earlier versions for recovery.
+
+
+
+
+Step 8 — Store your first secret
+Let's simulate a real application storing a database credential.
+
+We'll use dummy credentials only.
+
+Run:
+kubectl exec -n vault vault-0 -- vault kv put secret/myapp \
+  username="devsecops_user" \
+  password="LabPassword123!"
+
+
+Understand the command
+Part	Meaning
+vault kv put	Create or update a secret
+secret/	KV secrets engine mount
+myapp	Secret's path
+username	First secret field
+password	Second secret field
+
+Conceptually, we're storing:
+{
+  "username": "devsecops_user",
+  "password": "LabPassword123!"
+}
+
+
+Step 9 — Retrieve the secret
+After the write succeeds, run:
+kubectl exec -n vault vault-0 -- vault kv get secret/myapp
+
+
+You should see the stored username and password.
+
+Important: This is a deliberately simple demonstration using a root token. Later, we'll create a restricted policy so an application can read only its own secrets without receiving administrator privileges.
+
+
+
+
+
+1. Read your output
+Your result:
+Secret Path: secret/data/myapp
+
+version: 1
+destroyed: false
+deletion_time: n/a
+
+
+Important details:
+- secret/data/myapp: KV v2 internally uses the /data/ API path.
+- version: 1: This is the first version of your secret.
+- destroyed: false: The secret hasn't been permanently destroyed.
+- deletion_time: n/a: The secret hasn't been deleted.
 
 
 
