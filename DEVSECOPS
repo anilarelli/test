@@ -20788,4 +20788,41 @@ Verified allowed and denied operations		Done
 
 
 
+Next: Vault policies and access control
+This is where things get interesting.
+
+We'll create two identities:
+- Application A: Can read secret/myapp only.
+- Application B: Cannot read secret/myapp.
+We'll demonstrate how Vault enforces least-privilege access.
+
+We'll cover:
+1. What is a Vault policy?
+2. HCL policy syntax.
+3. Creating and attaching policies.
+4. Creating restricted tokens.
+5. Testing allowed and denied access.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
