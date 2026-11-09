@@ -21023,5 +21023,435 @@ You now understand three important Vault concepts:
 
 
 
+Vault Lesson 4 — Kubernetes Authentication
+Now we'll connect your existing Minikube cluster to Vault.
+
+Our goal: Your Flask application should retrieve secrets from Vault using its Kubernetes identity, without storing a permanent Vault token inside the application.
+What we're going to build
+Flask application running in Kubernetes
+
+Kubernetes Service Account
+
+Kubernetes authentication
+
+Vault validates the application's identity
+
+HashiCorp Vault
+
+Checks policy and grants an appropriate token
+
+Application receives its permitted secret
 
 
+Step 1 — Understand Kubernetes Service Accounts
+A Service Account is an identity assigned to a workload running inside Kubernetes.
+
+For example:
+- Flask application → flask-app
+- Jenkins pipeline → jenkins
+- Monitoring agent → prometheus
+Instead of giving every application a Vault root token, Vault can verify its Kubernetes identity and issue a restricted token.
+Step 2 — Check your Kubernetes service accounts
+Run:
+kubectl get serviceaccounts -A
+
+
+This lists service accounts across all namespaces.
+
+Then check the Vault namespace:
+kubectl get serviceaccounts -n vault
+
+
+Why are we checking this?
+
+I want to understand which service accounts already exist in your cluster before creating new ones. We won't overwrite or recreate existing identities unnecessarily.
+
+
+
+We should create a separate service account for your Flask application, rather than reuse Vault's own identity.
+Step 3 — Create the Flask service account
+Run:
+kubectl create serviceaccount flask-app -n default
+
+
+Verify:
+kubectl get serviceaccount flask-app -n default
+
+
+Expected:
+NAME        SECRETS   AGE
+flask-app   0         ...
+
+
+Why SECRETS 0?
+
+Modern Kubernetes versions use projected, short-lived service-account tokens rather than automatically creating permanent Secret objects for every service account. This is expected.
+
+Once this is created, we'll configure Vault's Kubernetes authentication method to validate the application's identity.
+
+
+
+
+Step 5 — Enable Kubernetes authentication in Vault
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault auth enable kubernetes
+
+
+Expected output:
+Success! Enabled kubernetes auth method at: kubernetes/
+
+
+What does this command do?
+It enables a new authentication method inside Vault.
+
+Before:
+
+- Applications authenticate using Vault tokens.
+
+After:
+- Applications can authenticate using Kubernetes service-account tokens.
+- Vault validates those tokens with the Kubernetes API.
+- Vault issues a token with the policies assigned to that application's Kubernetes role.
+Verify:
+kubectl exec -n vault vault-0 -- vault auth list
+
+
+Look for:
+kubernetes/    kubernetes
+
+
+
+
+Next: Step 6 — Configure Vault to communicate with Kubernetes
+Vault needs three things:
+1. Kubernetes API address — where Kubernetes is running.
+2. Kubernetes CA certificate — verifies the API server's identity.
+3. TokenReview authentication — allows Vault to validate application service-account tokens.
+We'll use the existing vault service account and verify its permissions rather than create unnecessary identities.
+
+Run:
+kubectl exec -n vault vault-0 -- sh -c \
+'echo "Kubernetes host: $KUBERNETES_SERVICE_HOST"; echo "Kubernetes port: $KUBERNETES_SERVICE_PORT"'
+
+
+Then:
+kubectl exec -n vault vault-0 -- \
+  ls -l /var/run/secrets/kubernetes.io/serviceaccount/
+
+
+We need to confirm the API endpoint and mounted credentials before configuring Vault.
+
+
+Step 7 — Configure Kubernetes authentication
+We'll use Vault's own service-account token to authenticate TokenReview requests.
+
+Run this command:
+kubectl exec -n vault vault-0 -- sh -c '
+vault write auth/kubernetes/config \
+  kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}" \
+  kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+  token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+'
+
+
+Understand the configuration
+- kubernetes_host: Kubernetes API endpoint.
+- kubernetes_ca_cert: CA certificate used to verify the API server.
+- token_reviewer_jwt: Vault's service-account token, used to call the Kubernetes TokenReview API.
+Important: The Vault service account must have permission to create TokenReview resources. We checked this earlier; we'll verify the permission again if the configuration fails.
+Step 8 — Verify the configuration
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault read auth/kubernetes/config
+
+
+
+
+
+Step 8 — Create a Vault Kubernetes role
+Now we'll connect the flask-app Kubernetes service account to our existing read-only policy.
+
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault write auth/kubernetes/role/flask-app \
+  bound_service_account_names=flask-app \
+  bound_service_account_namespaces=default \
+  policies=myapp-read-policy \
+  ttl=1h
+
+
+Understand each parameter
+Parameter	Purpose
+role/flask-app	Creates a Vault role named flask-app
+bound_service_account_names	Only this Kubernetes service account can authenticate
+bound_service_account_namespaces	Only the default namespace is accepted
+policies	Attach our read-only Vault policy
+ttl=1h	Issued Vault tokens expire after one hour
+
+The important relationship is:
+Kubernetes Service Account
+
+default / flask-app
+
+Vault Kubernetes Role
+
+flask-app
+
+Vault Policy
+
+myapp-read-policy
+
+Read-only access to secret/myapp
+
+
+
+
+Step 9 — Verify the role
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault read auth/kubernetes/role/flask-app
+
+
+For now, let's inspect the role before changing it.
+
+
+
+
+
+Step 10 — Check the Kubernetes token audience
+Before authentication, let's inspect the actual audience of the Flask service account's projected token.
+
+Run:
+kubectl create token flask-app -n default
+
+
+This prints a JWT. Do not paste the token here.
+
+Decode its payload locally:
+TOKEN=$(kubectl create token flask-app -n default)
+
+python3 -c '
+import os, json, base64
+token = os.environ["TOKEN"]
+payload = token.split(".")[1]
+payload += "=" * (-len(payload) % 4)
+data = json.loads(base64.urlsafe_b64decode(payload))
+print("Issuer:", data.get("iss"))
+print("Audience:", data.get("aud"))
+print("Subject:", data.get("sub"))
+' 
+
+
+The command above needs the token exported first. Use this complete version:
+export TOKEN=$(kubectl create token flask-app -n default)
+
+python3 -c '
+import os, json, base64
+payload = os.environ["TOKEN"].split(".")[1]
+payload += "=" * (-len(payload) % 4)
+data = json.loads(base64.urlsafe_b64decode(payload))
+print("Issuer:", data.get("iss"))
+print("Audience:", data.get("aud"))
+print("Subject:", data.get("sub"))
+'
+unset TOKEN
+
+
+Why are we doing this?
+We want to configure the Vault role's audience to match the actual Kubernetes token audience, rather than guessing.
+
+
+
+
+Step 11 — Configure the Vault role audience
+We'll make Vault accept only tokens intended for the Kubernetes API audience we just discovered.
+
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault write auth/kubernetes/role/flask-app \
+  bound_service_account_names=flask-app \
+  bound_service_account_namespaces=default \
+  audience="https://kubernetes.default.svc.cluster.local" \
+  token_policies=myapp-read-policy \
+  token_ttl=1h
+
+
+This updates the existing role; it does not create a second role.
+
+Verify:
+kubectl exec -n vault vault-0 -- \
+  vault read auth/kubernetes/role/flask-app
+
+
+Look for:
+audience    https://kubernetes.default.svc.cluster.local
+
+
+Step 12 — Authenticate Flask with Vault
+After verifying the audience, we'll use the Kubernetes service-account token to authenticate:
+kubectl exec -n vault vault-0 -- sh -c '
+vault write auth/kubernetes/login \
+  role=flask-app \
+  jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+'
+
+
+Important: This last command uses Vault's own service-account token, not the Flask application's token. Don't run it yet. We'll perform the actual login using the flask-app identity in the next step.
+
+
+
+
+Vault correctly rejected it.
+Security restriction working correctly
+Step 13 — Authenticate using the actual Flask identity
+We'll generate a token for flask-app and use it to authenticate with Vault.
+
+Run this on your Kali terminal:
+export K8S_TOKEN=$(kubectl create token flask-app -n default)
+
+
+Now send that token to Vault:
+kubectl exec -n vault vault-0 -- \
+  vault write auth/kubernetes/login \
+  role=flask-app \
+  jwt="$K8S_TOKEN"
+
+
+If successful, Vault will return an authentication response containing:
+- policies: should include myapp-read-policy.
+- token_policies: should include myapp-read-policy.
+- lease_duration: should be approximately 3600 seconds.
+Then clean up the temporary token:
+unset K8S_TOKEN
+
+
+
+2. Next: Verify the permissions of this token
+We'll test the token Vault just issued.
+
+First, authenticate again and capture the returned token automatically without printing it:
+export K8S_TOKEN=$(kubectl create token flask-app -n default)
+
+export VAULT_TOKEN=$(kubectl exec -n vault vault-0 -- \
+  vault write -field=token auth/kubernetes/login \
+  role=flask-app jwt="$K8S_TOKEN")
+
+unset K8S_TOKEN
+
+
+Now test reading the secret:
+kubectl exec -n vault vault-0 -- \
+  env VAULT_TOKEN="$VAULT_TOKEN" \
+  vault kv get secret/myapp
+
+
+Expected: successful retrieval.
+
+Then test writing:
+kubectl exec -n vault vault-0 -- \
+  env VAULT_TOKEN="$VAULT_TOKEN" \
+  vault kv put secret/myapp password="UnauthorizedChange"
+
+
+Expected: 403 Permission Denied.
+
+Finally, clean up your local token:
+unset VAULT_TOKEN
+
+
+
+
+
+
+Step 1 — Confirm the Vault service account
+Run:
+kubectl get serviceaccount vault -n vault
+
+
+Step 2 — Create a ClusterRole for TokenReview
+Create a file:
+nano vault-tokenreview.yaml
+
+
+Paste:
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-tokenreview
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+
+
+Save it.
+Step 3 — Bind the permission to Vault
+Create another file:
+nano vault-tokenreview-binding.yaml
+
+
+Paste:
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-tokenreview-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: vault
+    namespace: vault
+
+
+Apply both:
+kubectl apply -f vault-tokenreview.yaml
+kubectl apply -f vault-tokenreview-binding.yaml
+
+
+Step 4 — Verify
+Run:
+kubectl auth can-i create tokenreviews.authentication.k8s.io \
+  --as=system:serviceaccount:vault:vault
+
+
+Expected:
+yes
+
+
+
+
+
+Next step — Bind your actual Flask application's identity
+Your existing application uses:
+Namespace: dev
+Service account: myapp-my-app-chart
+
+
+We'll create a Vault role for this actual identity.
+
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault write auth/kubernetes/role/myapp-production \
+  bound_service_account_names=myapp-my-app-chart \
+  bound_service_account_namespaces=dev \
+  audience="https://kubernetes.default.svc.cluster.local" \
+  token_policies=myapp-read-policy \
+  token_ttl=1h
+
+
+Despite the role name myapp-production, this is still a development lab configuration.
+
+Verify it:
+kubectl exec -n vault vault-0 -- \
+  vault read auth/kubernetes/role/myapp-production
+
+
+Expected configuration:
+- Service account: myapp-my-app-chart
+- Namespace: dev
+- Policy: myapp-read-policy
+- Audience: Kubernetes API audience
+- TTL: 1 hour
