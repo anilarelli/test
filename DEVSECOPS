@@ -21455,3 +21455,23 @@ Expected configuration:
 - Policy: myapp-read-policy
 - Audience: Kubernetes API audience
 - TTL: 1 hour
+
+
+
+
+Step 12 — Authenticate using the actual Flask identity
+Before changing your Helm chart, let's prove that the existing Flask service account can authenticate.
+
+Generate its Kubernetes token:
+export APP_JWT=$(kubectl create token myapp-my-app-chart -n dev)
+
+
+Authenticate with Vault:
+kubectl exec -n vault vault-0 -- \
+  vault write auth/kubernetes/login \
+  role=myapp-production \
+  jwt="$APP_JWT"
+
+
+Clean up:
+unset APP_JWT
