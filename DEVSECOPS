@@ -20806,6 +20806,196 @@ We'll cover:
 
 
 
+Vault Lesson 3 — Policies and Access Control
+Today we'll learn how to restrict access to secrets.
+
+Our objective: Create an application identity that can read secret/myapp but cannot access other secrets or perform administrative operations.
+Step 1 — Understand the security problem
+Currently, you're using the Vault root token.
+
+The root token has extensive administrative privileges. Giving it to every application would be a serious security risk.
+
+Imagine this setup:
+Identity	Permission
+Vault administrator	Full administrative access
+Application A	Read secret/myapp only
+Application B	Read secret/payment only
+Unauthorized application	No access
+
+This is called Least Privilege: give each identity only the permissions it needs.
+Step 2 — Understand Vault policies
+Vault policies define what an identity can do.
+
+Vault uses a policy language called HCL (HashiCorp Configuration Language).
+
+For example:
+path "secret/data/myapp" {
+  capabilities = ["read"]
+}
+
+
+Let's understand every line:
+Syntax	Meaning
+path	Which Vault API path the policy controls
+secret/data/myapp	The KV v2 data path
+capabilities	Operations permitted on that path
+read	Permission to retrieve the secret
+
+Some common capabilities:
+- create — create a secret.
+- read — retrieve a secret.
+- update — modify a secret.
+- delete — delete a secret.
+- list — list secret paths.
+- sudo — access operations requiring elevated privileges.
+Step 3 — Create your first policy
+We'll create a policy called myapp-read-policy.
+
+In your terminal, run:
+nano myapp-policy.hcl
+
+
+Paste this:
+path "secret/data/myapp" {
+  capabilities = ["read"]
+}
+
+
+Save the file:
+- CTRL + O
+- Press Enter
+- CTRL + X
+Step 4 — Upload the policy to Vault
+Run:
+kubectl cp myapp-policy.hcl vault/vault-0:/tmp/myapp-policy.hcl
+
+
+Then execute:
+kubectl exec -n vault vault-0 -- \
+  vault policy write myapp-read-policy /tmp/myapp-policy.hcl
+
+
+Expected output:
+Success! Uploaded policy: myapp-read-policy
+
+
+Step 5 — Verify the policy
+Run:
+kubectl exec -n vault vault-0 -- \
+  vault policy read myapp-read-policy
+
+
+You should see the policy we created.
+
+
+
+
+Step 10 — Create a restricted application token
+We'll attach our myapp-read-policy to a new token.
+
+Run:
+kubectl exec -n vault vault-0 -- vault token create \
+  -policy="myapp-read-policy" \
+  -ttl="1h"
+
+
+Understand the command
+Parameter	Meaning
+token create	Generate a new Vault token
+-policy	Attach the read-only policy
+-ttl=1h	Token expires after one hour
+
+You'll receive a token beginning with hvs..
+
+Important
+ Don't share the token value here. Save it temporarily in your lab environment.
+
+Expected result: A new token with only myapp-read-policy, rather than the root policy.
+
+Paste the output with the actual token value replaced by <REDACTED>. Then we'll test its permissions.
+
+
+
+
+
+Great. Now we'll test the restricted token.
+Step 11 — Test read permission
+Run this command, replacing <YOUR_TOKEN> with the token you generated:
+kubectl exec -n vault vault-0 -- sh -c \
+'VAULT_TOKEN="<YOUR_TOKEN>" vault kv get secret/myapp'
+
+
+Expected
+ Secret retrieval should succeed.
+Step 12 — Test write permission
+Now try:
+kubectl exec -n vault vault-0 -- sh -c \
+'VAULT_TOKEN="<YOUR_TOKEN>" vault kv put secret/myapp password="ChangedPassword"'
+
+
+Expected
+ 403 Permission Denied.
+Step 13 — Test access to another secret
+Try:
+kubectl exec -n vault vault-0 -- sh -c \
+'VAULT_TOKEN="<YOUR_TOKEN>" vault kv get secret/payment'
+
+
+Expected
+ 403 Permission Denied (assuming no secret/payment secret exists and the token has no permission to read it).
+
+Security reminder: Keep your actual token private. Don't paste it into this chat or commit it to GitHub.
+
+Share the results of these three tests, with any token values redacted.
+
+
+
+
+
+Good catch. This is a useful Vault security behaviour, but there's an important detail we need to fix.
+
+Your restricted token is being denied during Vault's preflight capability check.
+
+The error occurs at:
+GET /v1/sys/internal/ui/mounts/secret/myapp
+403 Permission Denied
+preflight capability check returned
+
+
+The KV v2 CLI performs this preliminary check before retrieving the secret. Our policy currently grants access to the data path, but the CLI also needs permission to inspect the mount information.
+Step 1 — Update the policy
+Let's add the required read permission for the mount inspection endpoint.
+
+Open your policy file:
+nano myapp-policy.hcl
+
+
+Replace its contents with:
+path "secret/data/myapp" {
+  capabilities = ["read"]
+}
+
+path "sys/internal/ui/mounts/secret/myapp" {
+  capabilities = ["read"]
+}
+
+
+Step 2 — Upload the updated policy
+kubectl cp myapp-policy.hcl vault/vault-0:/tmp/myapp-policy.hcl
+
+
+Then:
+kubectl exec -n vault vault-0 -- \
+  vault policy write myapp-read-policy /tmp/myapp-policy.hcl
+
+
+Step 3 — Test again
+Use your existing restricted token:
+kubectl exec -n vault vault-0 -- sh -c \
+'VAULT_TOKEN="<YOUR_TOKEN>" vault kv get secret/myapp'
+
+
+Expected: successful secret retrieval.
 
 
 
@@ -20813,13 +21003,22 @@ We'll cover:
 
 
 
+Excellent! Vault policy testing completed
 
 
+You've successfully demonstrated least-privilege access control.
+Your results
+Security test	Expected result
+Read secret/myapp	Allowed
+Write secret/myapp	Denied
+Read unauthorized secret	Denied
+KV v2 mount preflight check	Allowed
 
-
-
-
-
+What you've learned
+You now understand three important Vault concepts:
+1. KV v2: Stores secrets with version history.
+2. Vault policies: Define which API paths an identity can access.
+3. Vault tokens: Carry the permissions granted through attached policies.
 
 
 
