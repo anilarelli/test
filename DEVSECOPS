@@ -22191,4 +22191,330 @@ jenkinsfile	No change required for this manual image build and GitOps deployment
 
 
 
+11. What we completed
+- [x] Vault KV v2 secret storage
+- [x] Kubernetes authentication
+- [x] Vault role and read-only policy
+- [x] Flask-to-Vault API integration
+- [x] Vault token caching
+- [x] Docker image build
+- [x] Local application test
+- [x] Docker Hub push
+- [x] ArgoCD GitOps deployment
+- [x] Browser verification of secret retrieval
+
+
+
+
+
+Next lesson: Vault Secret Rotation
+What we're going to achieve
+
+Step 1 — Rotate the secret
+Execute:
+kubectl exec -it -n vault vault-0 -- sh
+
+
+Inside Vault:
+export VAULT_ADDR=http://127.0.0.1:8200
+
+vault kv patch secret/myapp \
+  secret_token="RotatedLabSecret789!"
+
+
+This creates a new KV v2 version while preserving the other fields.
+
+
+
+
+Lesson 2 — Handle expired tokens automatically
+We'll improve the Flask code so that:
+- It detects an HTTP 403 response.
+- It discards the cached Vault token.
+- It authenticates again using the Kubernetes JWT.
+- It retries the secret request once.
+- It returns an error if authentication still fails.
+
+
+
+
+
+# Vault Token Lifecycle Management — DevSecOps Reference
+
+## 1. Objective
+
+Make the Flask application handle Vault token expiration and revocation automatically.
+
+The application should:
+
+1. Authenticate using its Kubernetes ServiceAccount JWT.
+2. Obtain a Vault token.
+3. Cache the token until shortly before expiry.
+4. Detect an expired or revoked token.
+5. Authenticate again.
+6. Retry secret retrieval once.
+
+## 2. Current architecture
+
+- Vault namespace: `vault`
+- Application namespace: `dev`
+- Vault role: `myapp-production`
+- Vault policy: `myapp-read-policy`
+- Kubernetes ServiceAccount: `myapp-my-app-chart`
+- Secret path: `secret/data/myapp`
+- Token TTL: 1 hour
+
+## 3. Flask code changes
+
+File:
+
+`~/learn/devsecops-lab/app.py`
+
+### A. Vault token authentication with forced refresh
+
+Replace the existing `get_vault_token()` function:
+
+```python
+def get_vault_token(force_refresh=False):
+    global vault_token, vault_token_expiry
+
+    with vault_lock:
+        if (
+            not force_refresh
+            and vault_token
+            and time.monotonic() < vault_token_expiry
+        ):
+            return vault_token
+
+        with open(JWT_PATH, "r") as jwt_file:
+            jwt = jwt_file.read().strip()
+
+        response = requests.post(
+            f"{VAULT_ADDR}/v1/auth/kubernetes/login",
+            json={
+                "role": VAULT_ROLE,
+                "jwt": jwt
+            },
+            timeout=5
+        )
+
+        response.raise_for_status()
+
+        auth_data = response.json()["auth"]
+
+        vault_token = auth_data["client_token"]
+
+        ttl = auth_data["lease_duration"]
+
+        vault_token_expiry = (
+            time.monotonic() + max(1, ttl - 30)
+        )
+
+        return vault_token
+```
+
+### B. Automatic re-authentication
+
+Replace the existing `get_secret_from_vault()` function:
+
+```python
+def get_secret_from_vault():
+
+    token = get_vault_token()
+
+    response = requests.get(
+        f"{VAULT_ADDR}{VAULT_SECRET_PATH}",
+        headers={
+            "X-Vault-Token": token
+        },
+        timeout=5
+    )
+
+    # Retry once if the Vault token is rejected
+    if response.status_code == 403:
+
+        # Discard the cached token
+        global vault_token, vault_token_expiry
+
+        with vault_lock:
+            vault_token = None
+            vault_token_expiry = 0
+
+        # Authenticate again
+        token = get_vault_token(force_refresh=True)
+
+        # Retry the secret request
+        response = requests.get(
+            f"{VAULT_ADDR}{VAULT_SECRET_PATH}",
+            headers={
+                "X-Vault-Token": token
+            },
+            timeout=5
+        )
+
+    response.raise_for_status()
+
+    secret_data = response.json()["data"]["data"]
+
+    return secret_data["secret_token"]
+```
+
+**Important:** A 403 can also indicate insufficient policy permissions, not just token expiry. This implementation retries once, but it cannot fix a policy denial. A production implementation should also handle concurrent requests and distinguish authentication failures from authorization failures.
+
+## 4. Validate Python code
+
+```bash
+cd ~/learn/devsecops-lab
+```
+
+```bash
+python3 -m py_compile app.py
+```
+
+Expected:
+
+```text
+No output = Syntax validation passed
+```
+
+## 5. Build Docker image
+
+```bash
+docker build -f dockerfile \
+  -t anilarelli/my-app:vault-token-refresh .
+```
+
+## 6. Test locally
+
+```bash
+docker run -d \
+  --name myapp-vault-test \
+  -p 5001:5000 \
+  anilarelli/my-app:vault-token-refresh
+```
+
+Local `/` and `/health` endpoints can be tested.
+
+Note: `/secret` is expected to fail outside Kubernetes because the local container does not have the Kubernetes ServiceAccount JWT and in-cluster Vault connectivity.
+
+Cleanup:
+
+```bash
+docker rm -f myapp-vault-test
+```
+
+## 7. Push Docker image
+
+```bash
+docker push anilarelli/my-app:vault-token-refresh
+```
+
+## 8. Update ArgoCD Git repository
+
+Open:
+
+`~/learn/devsecops-lab/my-app-chart/values.yaml`
+
+Change:
+
+```yaml
+image:
+  repository: anilarelli/my-app
+  tag: "vault-token-refresh"
+  pullPolicy: IfNotPresent
+```
+
+Validate:
+
+```bash
+helm lint .
+```
+
+Commit and push:
+
+```bash
+git add values.yaml
+
+git commit -m "Add Vault token refresh handling"
+
+git push argocd HEAD
+```
+
+## 9. Deploy using ArgoCD
+
+Open:
+
+`https://localhost:8080`
+
+Select application `myapp`.
+
+1. Refresh.
+2. Sync.
+3. Wait for Healthy and Synced.
+
+## 10. Verify application
+
+Start port forwarding:
+
+```bash
+kubectl port-forward -n dev \
+  svc/myapp-my-app-chart 5002:80
+```
+
+Open:
+
+`http://localhost:5002/secret`
+
+Expected: The current Vault secret.
+
+## 11. Important Vault concepts
+
+| Concept | Meaning |
+|---|---|
+| TTL | How long a Vault token remains valid |
+| Token expiry | Token becomes invalid after its lifetime |
+| Token renewal | Extends the lifetime of a renewable token |
+| Re-authentication | Obtains a new token using Kubernetes authentication |
+| Revocation | Immediately invalidates a token |
+| Token caching | Reuses an existing valid token |
+| Least privilege | Grants only the permissions the application needs |
+
+## 12. Production considerations
+
+Before production deployment:
+
+- Enable TLS with certificate verification.
+- Implement safe token renewal or re-authentication.
+- Handle concurrent requests during token refresh.
+- Handle Vault downtime and retry with bounded backoff.
+- Never log Vault tokens or secret values.
+- Use persistent, secure Vault storage instead of development-mode in-memory storage.
+- Consider secret caching and rotation requirements.
+
+**Lesson outcome:** The Flask application can recover from a rejected Vault token by obtaining a fresh token and retrying secret retrieval once.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
