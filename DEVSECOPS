@@ -22509,7 +22509,21 @@ Stage 8 — Supply Chain
 
 
 
+Lesson 1: What is an SBOM?
+An SBOM is an inventory of all software components and dependencies inside an application or container image.
 
+For example, your Flask application contains:
+- Python 3.12
+- Flask
+- Requests
+- Redis
+- Prometheus client
+- Their transitive dependencies
+Syft discovers these components and generates an SBOM.
+
+Why does DevSecOps need it?
+
+If a vulnerability is discovered in a Python library, an SBOM helps you identify which of your images contain that library.
 
 
 
