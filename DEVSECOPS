@@ -22527,6 +22527,98 @@ If a vulnerability is discovered in a Python library, an SBOM helps you identify
 
 
 
+Step 1 — Install Syft
+Run:
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+
+
+Step 2 — Verify installation
+syft version
+
+
+You should see the installed Syft version.
+
+
+
+
+Step 2 — Scan the Docker image
+Run:
+syft anilarelli/my-app:vault-api-test
+
+
+Syft will inspect the image and identify:
+- Operating system packages
+- Python packages
+- Third-party dependencies
+- Package versions
+- Package metadata
+Step 3 — Save the SBOM
+Generate a CycloneDX JSON file:
+syft anilarelli/my-app:vault-api-test -o cyclonedx-json > myapp-sbom.json
+
+
+Also generate SPDX:
+syft anilarelli/my-app:vault-api-test -o spdx-json > myapp-sbom-spdx.json
+
+
+Verify the files:
+ls -lh myapp-sbom*
+
+
+
+
+
+Count components:
+python3 -c "import json; d=json.load(open('myapp-sbom.json')); print('Total components:', len(d['components']))"
+
+
+List package names and versions:
+python3 -c "import json; d=json.load(open('myapp-sbom.json')); [print(c['name'], c.get('version','')) for c in d['components'][:30]]"
+
+
+Lesson 2 — SBOM and vulnerability management
+Imagine a security advisory reports a vulnerability in a specific version of Flask or Werkzeug.
+
+Your SBOM helps answer:
+- Does our application contain that component?
+- Which version is installed?
+- Which Docker image contains it?
+- Do we need to rebuild and redeploy?
+
+
+
+
+Step 1 — Check Syft availability to Jenkins
+Syft is installed on your Kali terminal, but Jenkins runs under its own agent environment. We need to verify Jenkins can access it.
+
+Run:
+sudo -u jenkins syft version
+
+
+Next, add this stage immediately after Build Image in your Jenkinsfile:
+stage('Generate SBOM') {
+    steps {
+        sh '''
+        syft docker:${IMAGE_NAME}:${IMAGE_TAG} -o cyclonedx-json > sbom.cyclonedx.json
+        '''
+    }
+}
+
+
+This generates a CycloneDX SBOM for the image built by Jenkins. It doesn't change your image.
+
+
+
+
+
+Your pipeline now:
+1. Builds the Docker image.
+2. Generates a CycloneDX SBOM.
+3. Continues with image push and deployment.
+Next: preserve the SBOM as a Jenkins build artifact so you can download it from each build.
+
+Add this inside your Generate SBOM stage, immediately after the sh block:
+archiveArtifacts artifacts: 'sbom.cyclonedx.json', fingerprint: true
 
 
 
