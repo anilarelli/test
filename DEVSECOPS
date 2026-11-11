@@ -22625,4 +22625,65 @@ archiveArtifacts artifacts: 'sbom.cyclonedx.json', fingerprint: true
 
 
 
+Next: Cosign — Docker image signing
+
+
+
+
+Cosign lets us:
+- Sign Docker images.
+- Verify that an image came from a trusted build.
+- Detect whether an image was modified after signing.
+
+
+
+ Install Cosign using the official Sigstore binary.
+
+Run:
+curl -L -o cosign-linux-amd64 https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+sudo install -m 755 cosign-linux-amd64 /usr/local/bin/cosign
+rm cosign-linux-amd64
+
+
+Then verify:
+cosign version
+
+
+
+Next step — create your signing key pair.
+
+Run:
+cosign generate-key-pair
+
+
+It will ask you to set a password. Choose one and keep it safe.
+
+
+
+
+Step 3 — Sign your Docker image
+We'll sign the image you built and pushed earlier:
+
+anilarelli/my-app:vault-api-test
+
+Run:
+cosign sign --key cosign.key anilarelli/my-app:vault-api-test
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
