@@ -22673,6 +22673,95 @@ cosign sign --key cosign.key anilarelli/my-app:vault-api-test
 
 
 
+Stage 9 — Policy as Code
+
+
+
+
+Day 1 — Kubernetes Policy as Code
+Topic 1: Kubernetes Admission Control
+
+Let's start with a practical example from your existing Kubernetes lab.
+1. What happens when you deploy an application?
+Previously, you deployed your Flask application using Kubernetes manifests through Helm and ArgoCD.
+
+When Kubernetes receives a deployment request, it doesn't immediately create the application.
+
+The request passes through several stages.
+1. kubectl / ArgoCD
+Submits a Kubernetes resource
+2. Kubernetes API Server
+Receives the request
+3. Admission Control
+Checks whether the request should be allowed or modified
+4. Validation and persistence
+If accepted, the resource is stored in etcd
+
+There are two important admission controller types:
+A. Mutating Admission Controller
+Can modify a resource before it is stored.
+
+Example:
+- Automatically add labels.
+- Add security settings.
+- Inject configuration into a Pod.
+B. Validating Admission Controller
+Checks a resource and decides whether to allow or reject it.
+
+Example:
+- Reject containers running as root.
+- Reject privileged containers.
+- Reject images from unapproved registries.
+Important: Admission control operates on Kubernetes API requests. It is not a replacement for runtime security monitoring.
+
+
+
+
+Topic 2: How Admission Control works
+When you submit a Kubernetes deployment, the API server processes the request through several stages.
+1. Authentication — Who is making the request?
+2. Authorization — Is that identity allowed to perform this action?
+3. Admission Control — Does the requested resource comply with cluster policies?
+4. Persistence — If accepted, Kubernetes stores the resource in etcd.
+For example, imagine you submit a Pod that runs as root.
+Incoming request: Create Pod
+securityContext:
+  runAsUser: 0
+
+
+
+Authentication: Passed
+
+Authorization: Passed
+
+Admission policy: Rejected
+
+Pod creation denied
+
+The user may have permission to create Pods, but the security policy can still reject an insecure Pod.
+
+Key distinction: Authorization answers "May this user create a Pod?" Admission control answers "Should this particular Pod be allowed?"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
