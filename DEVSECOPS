@@ -22748,6 +22748,38 @@ Key distinction: Authorization answers "May this user create a Pod?" Admission c
 
 
 
+Topic 3: Mutating vs Validating Admission Webhooks
+Kubernetes supports two important types of admission webhooks.
+1. Mutating Admission Webhook
+It can modify a resource before Kubernetes stores it.
+
+Example: A developer creates a Pod without specifying CPU or memory requests.
+
+A mutating webhook can automatically add:
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+
+The submitted Pod is modified before persistence.
+2. Validating Admission Webhook
+It checks whether a resource follows a policy. It can allow or reject, but it cannot modify the resource.
+
+Example: A developer submits:
+securityContext:
+  privileged: true
+
+
+A validating webhook can reject the Pod because privileged containers are prohibited.
+Comparison
+Feature	Mutating	Validating
+Modify resources	Yes	No
+Allow requests	Yes	Yes
+Reject requests	Yes	Yes
+Typical purpose	Apply defaults	Enforce policies
+
+Remember: Mutating changes the resource; validating checks the resource.
 
 
 
@@ -22755,12 +22787,174 @@ Key distinction: Authorization answers "May this user create a Pod?" Admission c
 
 
 
+Topic 4: Introduction to Kyverno
+
+
+
+So far, we've learned that admission control can modify or reject Kubernetes resources.
+
+Kyverno is the policy engine. Admission control is the Kubernetes mechanism through which it enforces policies.
+
+Kyverno makes this easier by letting us define policies using YAML. We don't need to write our own admission webhook.
+Example: Block privileged containers
+Suppose your organization has this security rule:
+No application is allowed to run privileged containers.
+
+We can express that rule as a Kyverno policy.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: check-privileged
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Privileged containers are not allowed."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  privileged: false
+
+
+Understand these fields
+Field	Meaning
+ClusterPolicy	Policy applies across the cluster
+match	Selects which resources to inspect
+kinds: Pod	Applies to Pods
+validate	Checks a condition
+message	Error shown when rejected
+Enforce	Rejects resources that violate the policy
+
+Important: This is a validating policy. It rejects non-compliant Pods; it doesn't modify them
 
 
 
 
 
 
+
+Install Kyverno in Minikube using Helm.
+
+Run:
+helm repo add kyverno https://kyverno.github.io/kyverno/
+helm repo update
+helm install kyverno kyverno/kyverno -n kyverno --create-namespace
+
+
+
+
+Step 4 — Verify Kyverno is running.
+
+Run:
+kubectl get pods -n kyverno
+
+
+
+Now let's create our first security policy: Block privileged containers.
+
+Before creating it, one important detail: we'll use Enforce, so Kubernetes will reject Pods that violate the policy.
+
+Step 5 — Create the policy file.
+
+Run:
+nano disallow-privileged.yaml
+
+
+Paste this YAML:
+
+
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-privileged
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+  validations:
+    - expression: >
+        (object.spec.containers +
+        object.spec.?initContainers.orValue([])).all(
+          container,
+          container.?securityContext.?privileged.orValue(false) == false
+        )
+      message: "Privileged containers are not allowed."
+
+
+
+
+
+kubectl apply -f disallow-privileged.yaml
+
+
+
+Step 9 — Verify the policy
+Run:
+kubectl get validatingpolicy disallow-privileged
+
+
+
+
+
+
+Step 10 — Create a normal Pod
+Run:
+kubectl run kyverno-normal --image=nginx --restart=Never
+
+
+Expected result: Kyverno allows the Pod because it doesn't request privileged access.
+
+
+
+
+
+
+Step 11 — Test a privileged Pod
+Run this command:
+kubectl run kyverno-privileged --image=nginx --restart=Never --overrides='{"spec":{"containers":[{"name":"kyverno-privileged","image":"nginx","securityContext":{"privileged":true}}]}}'
+
+
+Expected result
+ Kyverno should reject the request with:
+
+Privileged containers are not allowed.
+
+
+
+
+Here's what we demonstrated:
+Test	Result
+Normal Pod	Allowed
+Privileged Pod	Rejected
+
+What you learned
+1. Kyverno integrates with Kubernetes admission control.
+2. ValidatingPolicy uses CEL expressions to evaluate resources.
+3. validationActions: Deny rejects non-compliant resources.
+4. The policy checks both regular and init containers.
+Step 12 — Clean up the test Pods
+Run:
+kubectl delete pod kyverno-normal --ignore-not-found
+
+
+The privileged Pod was rejected, so it should not exist.
 
 
 
