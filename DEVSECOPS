@@ -22960,6 +22960,459 @@ The privileged Pod was rejected, so it should not exist.
 
 
 
+Next lesson: Kubernetes Security Policy — Prevent Containers from Running as Root.
+
+
+
+There are two different approaches:
+1. Kubernetes securityContext — Configure the container itself to run as a non-root user.
+2. Kyverno ValidatingPolicy — Enforce that configuration centrally, so developers cannot deploy Pods that violate the rule.
+For example:
+
+Approach 1 — Application-level configuration
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+
+This configures one workload. A developer can omit it in another Deployment.
+
+Approach 2 — Kyverno enforcement
+
+A cluster-wide policy rejects Pods that don't meet the non-root requirement, even if someone forgets to configure their Deployment.
+Aspect	SecurityContext	Kyverno
+Purpose	Configure security	Enforce security rules
+Scope	Individual workload	Cluster-wide policy
+Prevents omission	No	Yes
+Rejects non-compliant deployments	Not by itself	Yes
+
+
+
+
+
+
+Step 1 — Create the Kyverno policy
+Run:
+nano require-nonroot.yaml
+
+
+Paste this:
+
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-nonroot
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+  validations:
+    - expression: >
+        (object.spec.containers +
+        object.spec.?initContainers.orValue([]) +
+        object.spec.?ephemeralContainers.orValue([])).all(
+          container,
+          container.?securityContext.?runAsNonRoot.orValue(
+            object.spec.?securityContext.?runAsNonRoot.orValue(false)
+          ) == true
+        )
+      message: "Containers must run as non-root."
+
+
+
+Save using Ctrl+O, Enter, Ctrl+X.
+Step 2 — Understand what the policy checks
+Configuration	Result
+runAsNonRoot: true at container level	Allowed
+runAsNonRoot: true at Pod level	Allowed, unless overridden
+Missing both settings	Rejected
+runAsNonRoot: false at container level	Rejected
+
+The policy checks regular containers, init containers and ephemeral containers.
+
+Important distinction: Your Dockerfile creates appuser. Your Helm chart configures the application to run as UID 1000. Kyverno now enforces the non-root requirement centrally, including for workloads that don't use your Helm chart.
+
+
+
+
+Step 3 — Validate
+After saving, run:
+kubectl apply --dry-run=server -f require-nonroot.yaml
+
+
+
+
+Step 4 — Apply the Kyverno policy
+Run:
+kubectl apply -f require-nonroot.yaml
+
+
+
+Step 5 — Test a non-compliant Pod
+Let's try creating a Pod without any non-root security configuration.
+
+Run:
+kubectl run root-test --image=nginx --restart=Never
+
+
+Expected result: Kyverno rejects the request with:
+Containers must run as non-root.
+
+
+
+
+
+
+In Kubernetes, if neither the Pod nor the container specifies runAsNonRoot: true, Kubernetes does not enforce non-root execution. The container may run as root, depending on its image configuration.
+
+Our Kyverno policy checks this field:
+container.?securityContext.?runAsNonRoot.orValue(false)
+
+
+This means:
+- If runAsNonRoot is true, the policy allows the container.
+- If the field is missing, it defaults to false for the policy check.
+- If it is false, the policy rejects the container.
+Important distinction: Kyverno is not detecting whether the process actually runs as root. It is enforcing that the Kubernetes manifest explicitly requires non-root execution.
+
+So our test is valid: kubectl run root-test omits that security setting, and Kyverno should reject it.
+
+This is a policy enforcement test, not proof that the container would actually have run as root.
+
+
+
+
+
+how to run as non root now ?
+To run a container as non-root, explicitly set runAsNonRoot: true and specify a non-root UID.
+
+Let's test this against the Kyverno policy we just created.
+
+Step 1 — Create a compliant Pod
+Run:
+
+kubectl run nonroot-test --image=nginx --restart=Never --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":101},"containers":[{"name":"nonroot-test","image":"nginx"}]}}'
+
+Here:
+
+runAsNonRoot: true tells Kubernetes to prevent root execution.
+
+runAsUser: 101 specifies a non-root UID.
+
+Kyverno checks the non-root requirement and should allow the Pod.
+
+Step 2 — Verify
+kubectl get pod nonroot-test
+
+If it starts successfully, we can verify the actual process UID inside the container.
+
+One important detail: The nginx image must support running under UID 101. If it fails because of file permissions, we'll use an image designed for non-root execution instead.
+
+
+
+Before moving on, clean up the test Pod:
+kubectl delete pod nonroot-test --ignore-not-found
+
+
+
+
+
+
+Next lesson: Kyverno Mutating Policies.
+
+
+
+So far, we've used Kyverno to reject insecure Pods. Now we'll learn how to automatically add security settings when developers forget them.
+
+Example:
+- Developer creates a Pod without runAsNonRoot.
+- Kyverno automatically adds runAsNonRoot: true.
+- Kubernetes validates the modified Pod and proceeds with creation.
+We'll cover:
+1. MutatingPolicy architecture.
+2. CEL mutation rules.
+3. Automatically adding security settings.
+4. Testing whether mutation works.
+
+
+
+
+
+Let's start with the core concept.
+
+ValidatingPolicy vs MutatingPolicy
+ValidatingPolicy	MutatingPolicy
+Checks a resource	Changes a resource
+Allows or rejects	Adds or modifies settings
+Example: reject privileged Pods	Example: add security defaults
+
+
+
+
+Practical example
+A developer submits this Pod:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+
+
+They forgot to specify runAsNonRoot.
+
+A MutatingPolicy can automatically add:
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+
+
+The important difference: the developer doesn't need to remember to add these settings manually.
+
+One important caveat: Automatically setting runAsNonRoot doesn't guarantee every image can run under UID 101. The image must support that user.
+
+
+
+Let's implement it in your cluster.
+
+Our MutatingPolicy will automatically add these Pod-level security settings when a new Pod is created:
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+
+
+This means developers won't need to specify them manually. Kyverno uses an ApplyConfiguration mutation to add the settings. 
+Kyverno+1
+
+Step 1 — Create the MutatingPolicy
+Run:
+nano add-nonroot.yaml
+
+
+Paste:
+
+apiVersion: policies.kyverno.io/v1
+kind: MutatingPolicy
+metadata:
+  name: add-nonroot
+spec:
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >
+          Object{
+            spec: Object.spec{
+              securityContext: Object.spec.securityContext{
+                runAsNonRoot: true,
+                runAsUser: 101
+              }
+            }
+          }
+
+
+
+Save with Ctrl+O, Enter, Ctrl+X.
+
+Important: Your existing require-nonroot ValidatingPolicy will also check the mutated Pod. The mutation should satisfy it.
+
+
+
+
+Step 2 — Validate the MutatingPolicy.
+
+Run:
+kubectl apply --dry-run=server -f add-nonroot.yaml
+
+
+This checks whether your Kyverno v1.20 API server accepts the policy without saving it.
+
+
+
+Step 3 — Apply the policy
+Run:
+kubectl apply -f add-nonroot.yaml
+
+
+This activates the automatic mutation policy.
+
+
+
+
+
+Step 4 — Test automatic mutation
+Create a Pod without specifying any security settings:
+kubectl run mutation-test --image=nginx --restart=Never
+
+
+
+
+
+Step 5 — Inspect the Pod security context
+Run:
+kubectl get pod mutation-test -o yaml
+
+
+Look under:
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+
+
+Expected: Both values should have been added automatically, even though we didn't specify them in the original kubectl run command.
+
+
+
+Let's clean up our test Pod:
+kubectl delete pod mutation-test
+
+
+
+
+
+
+
+
+
+i have a doubt, let say a pod is running as root and we enforced our validating policy what happens to to running pod
+Excellent question. This is an important distinction in Kubernetes admission control.
+
+A ValidatingPolicy does not automatically terminate or modify Pods that are already running.
+
+Let's understand what happens.
+
+Scenario: A Pod is already running as root
+Suppose you have:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: root-pod
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+
+The Pod was created before you installed the Kyverno policy, and its container runs as root.
+
+Now you apply a policy requiring:
+
+runAsNonRoot: true
+
+What happens?
+
+Existing Pod
+root-pod
+
+Already running as root
+
+Continues running
+
+New Pod
+new-pod
+
+Submitted without runAsNonRoot: true
+
+Rejected by Kyverno
+
+Why?
+Kyverno's validating admission policy evaluates incoming API requests, such as:
+
+CREATE
+
+UPDATE
+
+It doesn't continuously inspect running containers or change their security settings.
+
+What about existing Pods?
+There are three important considerations:
+
+Action
+
+Result
+
+Policy is installed
+
+Existing Pod continues running
+
+Existing Pod is deleted and recreated without compliant settings
+
+New Pod is rejected
+
+Existing Deployment is updated
+
+New Pod template is evaluated; a non-compliant update can be rejected
+
+How do we secure existing Pods?
+You need a remediation process:
+
+Identify existing non-compliant workloads.
+
+Update their Deployment/StatefulSet/DaemonSet security contexts.
+
+Roll out the updated workloads.
+
+Verify that the new Pods run as non-root.
+
+Real-world DevSecOps lesson: Admission control prevents future violations; it does not automatically remediate existing security violations.
+
+Also, Kyverno background policy reports can help identify existing resources that violate policies, but reporting is different from enforcement.
+
+
+
+
+
+
+
+Next topic: Kyverno Policy Reports
+So far, we've learned how to:
+- Reject insecure Kubernetes resources.
+- Automatically add security settings.
+- Enforce policies centrally.
+Now we'll learn how security teams monitor policy compliance across a cluster.
+
+For example, a Policy Report can show:
+- Which Pods passed security policies.
+- Which resources failed.
+- Which policies generated violations.
+- Which namespaces need attention.
+
+
+
+
+
+Step 1 — Check policy report resources
+Run:
+kubectl get crd | grep -i policyreport
+
+
+
+
+
+
+
 
 
 
