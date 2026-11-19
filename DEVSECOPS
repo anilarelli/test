@@ -23410,16 +23410,161 @@ kubectl get crd | grep -i policyreport
 
 
 
+Next topic: Enforce CPU and Memory Limits
+Why is this important?
+
+Imagine a developer deploys an application without resource limits. It could consume excessive memory and affect other workloads on the Kubernetes node.
+
+We want Kyverno to enforce resource limits on every application container.
 
 
 
 
 
 
+Step 1 — Create a policy file
+
+Run:
+nano require-resource-limits.yaml
+
+
+
+
+Step 2 — Validate the policy against your Kyverno v1.20 installation.
+
+Run:
+kubectl apply --dry-run=server -f require-resource-limits.yaml
+
+
+This checks the YAML and CEL expression without saving the policy.
+
+
+
+
+kubectl apply  -f require-resource-limits.yaml
+
+
+
+
+
+Step 3 — Test a non-compliant Pod
+Run:
+kubectl run resource-test --image=nginx --restart=Never
 
 
 
 
 
 
+Test a compliant Pod
+Let's prove that a Pod with resource limits is allowed.
 
+Run:
+kubectl run resource-test --image=nginx --restart=Never --overrides='{"spec":{"containers":[{"name":"resource-test","image":"nginx","resources":{"limits":{"cpu":"500m","memory":"512Mi"}}}]}}'
+
+
+
+
+
+Next topic: Restrict container image registries
+
+
+This is an important supply-chain security control.
+
+Imagine developers deploy images from:
+- Docker Hub
+- Unknown public registries
+- Unapproved personal repositories
+We want to allow images only from approved registries, such as your organization's private registry.
+
+We'll implement this using another Kyverno ValidatingPolicy
+
+
+
+
+
+Our objective is to prevent developers from deploying images from unapproved registries.
+
+For this lab, we'll allow:
+- docker.io
+- registry.k8s.io
+We'll reject images from other registries.
+
+
+
+
+
+Step 1 — Create the policy file
+Run:
+nano restrict-registries.yaml
+
+
+
+
+
+
+Step 1 — Add the registry restriction policy
+Paste this Kyverno v1.20 ValidatingPolicy:
+
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: restrict-registries
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+  validations:
+    - expression: >
+        (object.spec.containers +
+        object.spec.?initContainers.orValue([]) +
+        object.spec.?ephemeralContainers.orValue([])).all(
+          container,
+          container.image.startsWith('docker.io/') ||
+          container.image.startsWith('registry.k8s.io/')
+        )
+      message: "Images must come from docker.io or registry.k8s.io."
+
+
+
+
+
+kubectl apply  -f restrict-registries.yaml
+
+
+
+
+
+Test an unapproved registry
+Run:
+kubectl run registry-test --image=ghcr.io/example/app:latest --restart=Never
+
+
+
+We need to satisfy the earlier policy while testing the new one.
+Retry with CPU and memory limits
+Run:
+kubectl run registry-test --image=ghcr.io/example/app:latest --restart=Never --overrides='{"spec":{"containers":[{"name":"registry-test","image":"ghcr.io/example/app:latest","resources":{"limits":{"cpu":"500m","memory":"512Mi"}}}]}}
+
+
+
+
+
+Test an approved registry
+Run:
+kubectl run registry-approved --image=docker.io/library/nginx:latest --restart=Never --overrides='{"spec":{"containers":[{"name":"registry-approved","image":"docker.io/library/nginx:latest","resources":{"limits":{"cpu":"500m","memory":"512Mi"}}}]}}'
+
+
+
+
+kubectl delete pod registry-approved --ignore-not-found
