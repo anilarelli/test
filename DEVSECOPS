@@ -23568,3 +23568,34 @@ kubectl run registry-approved --image=docker.io/library/nginx:latest --restart=N
 
 
 kubectl delete pod registry-approved --ignore-not-found
+
+
+
+
+We've completed the privileged-container, non-root, resource-limit and registry policies, including mutation.
+
+
+
+
+
+
+Next lesson: Cosign image signature verification with Kyverno.
+
+The objective is to prevent Kubernetes from deploying container images unless their signatures can be verified against a trusted public key.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
