@@ -23588,6 +23588,263 @@ The objective is to prevent Kubernetes from deploying container images unless th
 
 
 
+Generate a signing key pair
+Cosign uses two keys:
+- Private key (cosign.key) — signs your container image. Keep it secret.
+- Public key (cosign.pub) — used by Kyverno to verify the image signature.
+Run:
+cosign generate-key-pair
+
+
+Cosign will ask you to create a password for the private key.
+
+Important: Don't share your password or private key with me. Keep both files secure.
+
+
+
+
+
+Sign your Docker image
+We'll sign your existing image:
+
+anilarelli/my-app:vault-api-test
+
+Run:
+cosign sign --key cosign.key docker.io/anilarelli/my-app:vault-api-test
+
+
+Cosign will:
+1. Ask for your private-key password.
+2. Resolve the image to its digest.
+3. Create a cryptographic signature.
+4. Upload the signature to Docker Hub alongside the image.
+This does not rebuild or modify your Docker image.
+
+
+
+
+
+
+
+Verify the image signature
+Run:
+cosign verify --key cosign.pub docker.io/anilarelli/my-app:vault-api-test
+
+
+
+
+
+Next: Integrate Cosign with Kyverno
+
+
+Now we'll make Kubernetes enforce this automatically:
+- Your signed image → Allowed.
+- An unsigned image → Rejected.
+- An image signed with an untrusted key → Rejected.
+We'll configure Kyverno's ImageValidatingPolicy to trust your cosign.pub public key.
+
+
+
+
+
+Get your public key
+Run:
+cat cosign.pub
+
+
+
+
+Create the ImageValidatingPolicy
+Run:
+nano verify-signed-images.yaml
+
+
+
+
+
+
+
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-signed-images
+spec:
+  validationActions:
+    - Deny
+
+  webhookConfiguration:
+    timeoutSeconds: 15
+
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+
+  matchImageReferences:
+    - glob: "docker.io/anilarelli/my-app*"
+
+  attestors:
+    - name: cosign
+      cosign:
+        key:
+          data: |
+            -----BEGIN PUBLIC KEY-----
+            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECO90iMiA3v/06ijEJunzt9rdmIsV
+            Kkgh03V+03du7pTseNDo1aZN1jqfMAIp82w9+AaRFwFWS108MQfvHkW/hw==
+            -----END PUBLIC KEY-----
+
+  validations:
+    - expression: >
+        images.containers.map(
+          image,
+          verifyImageSignatures(image, [attestors.cosign])
+        ).all(result, result > 0)
+      message: "Container images must have a valid Cosign signature from the trusted key."
+
+
+
+
+
+Validate the policy
+Run:
+kubectl apply --dry-run=server -f verify-signed-images.yaml
+
+
+
+
+
+Activate signature verification
+Run:
+kubectl apply -f verify-signed-images.yaml
+
+
+
+
+
+Deploy your signed image
+Run:
+kubectl run cosign-signed-test \
+  --image=docker.io/anilarelli/my-app:vault-api-test \
+  --restart=Never \
+  --overrides='{"spec":{"containers":[{"name":"cosign-signed-test","image":"docker.io/anilarelli/my-app:vault-api-test","resources":{"limits":{"cpu":"500m","memory":"512Mi"}}}]}}'
+
+
+Expected result: Kyverno allows the Pod because its image has a valid signature from your trusted public key.
+
+Note: We're testing admission first. The container's runtime status is a separate check.
+
+
+
+
+Prepare an unsigned test image
+Important: Cosign signatures are associated with image digests, not just tags. Simply changing the tag of your signed image won't create an unsigned test.
+
+We'll use a different image and push it under your application repository.
+
+First, run:
+docker pull nginx:latest
+
+
+
+
+
+Tag the unsigned image
+Run:
+docker tag nginx:latest anilarelli/my-app:unsigned-test
+
+
+This creates a new tag for the same image content. It does not copy or sign the image.
+
+
+
+
+
+Push the unsigned image to Docker Hub.
+
+Run:
+docker push anilarelli/my-app:unsigned-test
+
+
+
+
+
+
+Attempt to deploy the unsigned image
+Run:
+kubectl run cosign-unsigned-test \
+  --image=docker.io/anilarelli/my-app:unsigned-test \
+  --restart=Never \
+  --overrides='{"spec":{"containers":[{"name":"cosign-unsigned-test","image":"docker.io/anilarelli/my-app:unsigned-test","resources":{"limits":{"cpu":"500m","memory":"512Mi"}}}]}}'
+
+
+
+
+
+
+We've completed Cosign image signing and verified that Kyverno:
+- Allows your signed application image.
+- Rejects your unsigned image.
+
+
+
+
+
+
+Next lesson: Audit vs Enforce
+
+
+
+
+Enforce mode: Rejects resources that violate a policy.
+
+Audit mode: Allows the resource but records the policy violation so administrators can investigate and remediate it.
+
+
+
+
+1. Switch resource-limit policy to Audit
+kubectl patch validatingpolicy require-resource-limits --type=merge -p '{"spec":{"validationActions":["Audit"]}}'
+
+
+2. Create a Pod without resource limits
+kubectl run audit-test --image=docker.io/library/nginx:latest --restart=Never
+
+
+Expected: Pod creation is allowed.
+3. Check Policy Reports
+kubectl get policyreports -A
+
+
+kubectl get policyreports -A -o yaml
+
+
+4. Restore Enforce mode
+kubectl patch validatingpolicy require-resource-limits --type=merge -p '{"spec":{"validationActions":["Deny"]}}'
+
+
+5. Clean up
+kubectl delete pod audit-test --ignore-not-found
+
+
+6. Verify policy
+kubectl get validatingpolicy require-resource-limits -o yaml
+
+
+
+
+
+Kyverno — Policy Reports.
+
+We'll learn how to identify which Kubernetes resources pass or violate your security policies.
+
+
 
 
 
