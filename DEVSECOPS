@@ -1214,6 +1214,74 @@ Kubernetes Cluster
 
 
 
+What is GitOps?
+GitOps is a way of managing and deploying applications and Kubernetes configurations using Git as the source of truth.
+
+In simple terms:
+
+Instead of manually changing Kubernetes resources using kubectl, you store the desired configuration in a Git repository. A tool such as ArgoCD continuously checks Git and makes sure your Kubernetes cluster matches what's stored there.
+1. Without GitOps (manual deployment)
+Imagine you want to deploy an application.
+
+You manually run:
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+
+The cluster changes, but Git may not contain those changes.
+
+Problems:
+- Difficult to track who changed what.
+- Hard to roll back.
+- Configuration can differ between environments.
+- Manual changes can go undocumented.
+
+
+
+
+https://chatgpt.com/s/i_6b046d9526e48191aad4fa74308c3f36
+
+
+
+
+
+
+
+The workflow becomes:
+1. You write Kubernetes YAML files.
+2. You push those files to GitHub.
+3. ArgoCD monitors your Git repository.
+4. ArgoCD detects changes.
+5. ArgoCD synchronizes the changes to Kubernetes.
+6. Your cluster reaches the desired state defined in Git.
+3. How this applies to your DevSecOps lab
+You already have:
+Component				Purpose
+GitHub					Stores Kubernetes YAML and Kyverno policies
+ArgoCD					Monitors Git and synchronizes changes
+Kubernetes				Runs your applications
+Kyverno					Enforces security policies
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Lessons start with Basics
+
+
+
 
 ### logs in real time
 
@@ -23843,6 +23911,34 @@ kubectl get validatingpolicy require-resource-limits -o yaml
 Kyverno — Policy Reports.
 
 We'll learn how to identify which Kubernetes resources pass or violate your security policies.
+
+
+
+Check available Policy Reports
+Run:
+kubectl get policyreports -A
+
+
+
+
+Investigate an actual failure
+Let's inspect the kube-hunter report, which shows four failures.
+
+Run:
+kubectl get policyreport 145c321a-8709-4a68-8783-005bceb6c70e -n default -o yaml
+
+
+
+
+GitOps integration for Kyverno
+
+
+we'll manage policy YAML through Git and ArgoCD, then verify that changes are applied to the cluster.
+
+
+
+
+
 
 
 
