@@ -24091,22 +24091,42 @@ kubectl run privilege-escalation-test --image=docker.io/library/nginx:latest --r
 
 
 
+Topic 19 — OPA Gatekeeper
+
+
+Architecture and installation
+First, understand the difference:
+Kyverno									OPA Gatekeeper
+Kubernetes-native policies				Uses Open Policy Agent (OPA)
+Policies written in YAML and CEL		Policies written using Rego
+ValidatingPolicy / MutatingPolicy		ConstraintTemplate / Constraint
+Kubernetes admission control			Kubernetes admission control
+
+
+Gatekeeper uses three important components:
+
+1. OPA: Policy engine that evaluates decisions using Rego.
+2. ConstraintTemplate: Defines reusable policy logic.
+3. Constraint: Applies that logic to selected Kubernetes resources.
 
 
 
+https://chatgpt.com/s/i_6b05c2d473048191a8f35f19d13a83e3
+
+
+Install Gatekeeper using Helm.
+
+Run this single command:
+helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
 
 
 
+Install Gatekeeper.
 
-
-
-
-
-
-
-
-
-
+Run:
+helm upgrade --install gatekeeper gatekeeper/gatekeeper \
+  --namespace gatekeeper-system \
+  --create-namespace
 
 
 
