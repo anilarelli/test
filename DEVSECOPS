@@ -23920,7 +23920,6 @@ kubectl get policyreports -A
 
 
 
-
 Investigate an actual failure
 Let's inspect the kube-hunter report, which shows four failures.
 
@@ -23934,6 +23933,169 @@ GitOps integration for Kyverno
 
 
 we'll manage policy YAML through Git and ArgoCD, then verify that changes are applied to the cluster.
+
+
+
+- Export all six policies.
+- Remove generated Kubernetes metadata.
+- Commit and push to GitHub.
+- Connect the policy directory to ArgoCD.
+- Verify enforcement.
+Run this single command to export all six policies at once:
+cd ~/argocd-kyverno/kyverno-policies && \
+kubectl get validatingpolicy disallow-privileged -o yaml > disallow-privileged.yaml && \
+kubectl get validatingpolicy require-nonroot -o yaml > require-nonroot.yaml && \
+kubectl get validatingpolicy require-resource-limits -o yaml > require-resource-limits.yaml && \
+kubectl get validatingpolicy restrict-registries -o yaml > restrict-registries.yaml && \
+kubectl get mutatingpolicy add-nonroot -o yaml > add-nonroot.yaml && \
+kubectl get imagevalidatingpolicy verify-signed-images -o yaml > verify-signed-images.yaml
+
+
+
+
+Next, commit and push the six policies to your ArgoCD GitHub repository.
+
+Run:
+cd ~/argocd-kyverno && git add kyverno-policies/ && git commit -m "Add Kyverno security policies" && git push origin main
+
+
+
+
+
+Run this complete command:
+cat > ~/argocd-kyverno/kyverno-app.yaml <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/anilarelli5-gif/argocd
+    targetRevision: main
+    path: kyverno-policies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+EOF
+
+
+Then commit and push:
+cd ~/argocd-kyverno && git add kyverno-app.yaml && git commit -m "Add Kyverno policies ArgoCD application" && git push origin main
+
+
+We'll register it with ArgoCD after the push succeeds.
+
+
+cd ~/argocd-kyverno && git push origin main
+
+
+
+Next step — Register the application with ArgoCD
+Run:
+kubectl apply -f ~/argocd-kyverno/kyverno-app.yaml
+
+
+
+Run this single command to clean all six YAML files:
+python3 - <<'PY'
+from pathlib import Path
+import yaml
+
+directory = Path.home() / "argocd-kyverno/kyverno-policies"
+
+for file in directory.glob("*.yaml"):
+    with file.open() as f:
+        data = yaml.safe_load(f)
+
+    metadata = data.get("metadata", {})
+    for key in ("creationTimestamp", "generation", "resourceVersion", "uid", "managedFields"):
+        metadata.pop(key, None)
+
+    metadata.pop("annotations", None)
+    data.pop("status", None)
+
+    with file.open("w") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
+
+    print(f"Cleaned: {file.name}")
+PY
+
+
+
+
+
+Now commit and push the cleaned manifests:
+cd ~/argocd-kyverno && git add kyverno-policies/ && git commit -m "Remove generated metadata from Kyverno policies" && git push origin main
+
+
+
+
+
+Enable Server-Side Apply in ArgoCD
+This changes how ArgoCD applies resources and is intended to avoid the client-side patch conflicts.
+
+Run:
+kubectl patch application kyverno-policies -n argocd --type merge -p '{"spec":{"syncPolicy":{"syncOptions":["ServerSideApply=true"]}}}'
+
+
+
+kubectl get application kyverno-policies -n argocd
+
+
+
+
+Make a controlled GitOps change
+We'll add a second validation rule to disallow-privileged that rejects containers running with privilege escalation enabled.
+
+First, open the policy file:
+nano ~/argocd-kyverno/kyverno-policies/disallow-privileged.yaml
+
+
+
+Inside nano, find the existing validations: section.
+
+Add this second validation entry under the existing one, keeping the indentation exactly as shown:
+  - expression: |
+      object.spec.containers.all(
+        container,
+        container.?securityContext.?allowPrivilegeEscalation.orValue(false) == false
+      )
+    message: "Privilege escalation must be disabled."
+
+
+
+Now save the change to Git and push it:
+cd ~/argocd-kyverno && git add kyverno-policies/disallow-privileged.yaml && git commit -m "Add privilege escalation validation" && git push origin main
+
+
+
+
+
+Now verify that ArgoCD picked up your Git commit:
+kubectl get application kyverno-policies -n argocd
+
+
+
+
+Final verification — Test the new security rule
+Try creating a Pod with privilege escalation enabled:
+kubectl run privilege-escalation-test --image=docker.io/library/nginx:latest --restart=Never --overrides='{"spec":{"containers":[{"name":"privilege-escalation-test","image":"docker.io/library/nginx:latest","securityContext":{"allowPrivilegeEscalation":true},"resources":{"limits":{"cpu":"500m","memory":"512Mi"}}}]}}'
+
+
+
+
+
+
+
+
+
+
 
 
 
