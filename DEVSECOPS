@@ -24132,5 +24132,156 @@ helm upgrade --install gatekeeper gatekeeper/gatekeeper \
 
 
 
+Let's verify that its pods are running before we begin learning Rego and policy creation.
+
+Run this single command:
+kubectl get pods -n gatekeeper-system
+
+
+
+What Helm installed
+When you installed Gatekeeper, Helm created the infrastructure needed for it to operate, typically including:
+- Controller pods — manage policies, templates and audits.
+- Webhook pods — evaluate incoming Kubernetes resource requests.
+- Services — expose Gatekeeper's webhook endpoints internally.
+- CRDs — introduce Kubernetes resource types such as ConstraintTemplate and constraints.
+- Webhook configuration — tells the Kubernetes API server when to call Gatekeeper.
+
+
+
+
+Next step: Understand what Gatekeeper installed.
+
+Run:
+kubectl get pods,svc,deployments -n gatekeeper-system
+
+
+This will show the pods, services and deployments together so we can understand the Gatekeeper architecture from your actual cluster.
+
+
+
+
+
+let's understand the rule you just created before building anything else.
+package gatekeeper.allowedregistries
+
+
+- package defines the namespace for this Rego rule.
+- gatekeeper.allowedregistries organizes the policy logic.
+violation[{"msg": msg}] {
+
+
+- violation is the rule Gatekeeper looks for when identifying policy violations.
+- If this rule evaluates successfully, it produces a violation.
+- { "msg": msg } is the violation output structure, containing a message.
+container := input.review.object.spec.containers[_]
+
+
+- input is the data provided to Rego for evaluation.
+- input.review.object is the Kubernetes resource being evaluated.
+- spec.containers[_] iterates through containers in the Pod.
+- := assigns the current container to the variable container.
+not startswith(container.image, "docker.io/")
+
+
+- startswith() checks whether the image string begins with docker.io/.
+- not means the condition succeeds when the image does not begin with that prefix.
+msg := sprintf("Image '%v' is not allowed. Images must use docker.io/", [container.image])
+
+
+- sprintf() builds a formatted message.
+- %v is replaced by the container's image name.
+- [container.image] supplies the value used in the message.
+Important: This is a standalone Rego exercise file. Gatekeeper does not enforce it yet. We'll embed this logic into a ConstraintTemplate and apply a real constraint to your cluster.
+
+
+
+
+
+
+
+
+Run this single command to create the template file:
+cd ~/learn/gatekeeper && nano template.yaml
+
+
+
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedregistries
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRegistries
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedRegistries:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package gatekeeper.allowedregistries
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          allowed := input.parameters.allowedRegistries
+          not any_allowed(container.image, allowed)
+          msg := sprintf("Image '%v' is not from an allowed registry", [container.image])
+        }
+
+        any_allowed(image, allowed) {
+          registry := allowed[_]
+          startswith(image, registry)
+        }
+
+
+
+
+
+Now apply it:
+kubectl apply -f ~/learn/gatekeeper/template.yaml
+
+
+
+
+nano ~/learn/gatekeeper/constraint.yaml
+
+
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRegistries
+metadata:
+  name: allowed-registries
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["dev"]
+  parameters:
+    allowedRegistries:
+      - "docker.io/"
+      - "registry.k8s.io/"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
