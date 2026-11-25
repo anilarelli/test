@@ -24271,6 +24271,132 @@ spec:
 
 
 
+1. ConstraintTemplate = Define the rule
+Think of it as creating a reusable policy type.
+
+Our template.yaml defines:
+- What to inspect: Pod container images.
+- What condition is a violation: Image isn't from an allowed registry.
+- What parameters can be configured: allowedRegistries.
+It creates a new policy type in Kubernetes:
+K8sAllowedRegistries
+A custom constraint type Gatekeeper now understands.
+But defining this type alone doesn't tell Gatekeeper where to apply the rule or which registries to allow.
+
+2. Constraint = Configure and activate the rule
+Our constraint.yaml uses the policy type we created above.
+
+It tells Gatekeeper:
+- Where: Pods in the dev namespace.
+- Which registries are allowed: docker.io/ and registry.k8s.io/.
+- Apply the policy: Enforce this rule against matching resources.
+
+
+
+
+
+
+Why this design is useful
+Suppose your organization has 50 namespaces.
+
+You could create one ConstraintTemplate containing the policy logic, then create different Constraints:
+Constraint						Namespace				Allowed registries
+allowed-registries-dev			dev							docker.io
+allowed-registries-prod			prod						docker.io, registry.k8s.io
+allowed-registries-test			test						docker.io, quay.io
+
+You don't duplicate the Rego logic three times. You reuse the template and configure different constraints.
+
+In short:
+- ConstraintTemplate = What is the security rule?
+- Constraint = Where and with what settings should that rule apply?
+
+
+
+Now we need to apply the Constraint so Gatekeeper starts evaluating matching Pods in the dev namespace against the allowed registry rule.
+
+Run:
+kubectl apply -f ~/learn/gatekeeper/constraint.yam
+
+
+Now test whether Gatekeeper rejects an unapproved registry. Run:
+kubectl run gatekeeper-blocked-test --image=quay.io/nginx --restart=Never -n dev
+
+
+
+
+
+
+Gatekeeper Audit 
+
+
+
+
+
+—how it detects policy violations in existing resources, rather than just blocking new requests.
+
+This will show the constraints currently registered in Gatekeeper.
+kubectl get constraints -A
+
+
+
+
+Gatekeeper's audit is detecting a non-compliant resource that exists in the cluster; this is separate from the admission denial we just tested.
+
+Let's identify which resource is flagged.
+
+Run:
+kubectl get k8sallowedregistries allowed-registries -o yaml
+
+
+
+
+
+we'll demonstrate the difference between Admission enforcement and Audit with a practical test.
+
+Admission already blocks non-compliant new Pods. Audit checks existing resources periodically and reports violations without deleting or modifying them.
+
+First, let's inspect the existing violation's Pod:
+kubectl get pod myapp-my-app-chart-5787f4997f-55wf4 -n dev
+
+
+
+Next, we'll demonstrate the difference between Admission enforcement and Audit with a practical test.
+
+Admission already blocks non-compliant new Pods. Audit checks existing resources periodically and reports violations without deleting or modifying them.
+
+
+
+
+let's inspect the audit configuration in the live deployment.
+
+Run:
+kubectl get deployment gatekeeper-audit -n gatekeeper-system -o yaml
+
+
+
+This output gives us the key audit setting:
+--audit-interval=60
+
+
+Gatekeeper runs its audit approximately every 60 seconds.
+What the relevant settings mean
+Argument										Meaning
+--audit-interval=60								Periodic audit interval in seconds
+--constraint-violations-limit=20				Limits reported violations per constraint
+--audit-from-cache=false						Audit reads from the API server rather than relying on the audit cache
+--audit-chunk-size=500							Processes audit resources in chunks
+--audit-match-kind-only=false					Uses the configured matching criteria, not just kind matching
+
+
+
+
+
+
+
+
+
+
 
 
 
