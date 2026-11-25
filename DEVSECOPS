@@ -24393,6 +24393,136 @@ Argument										Meaning
 
 
 
+Audit and Admission enforcement
+
+
+
+
+- Admission enforcement: Prevents a new non-compliant Pod from being created — our quay.io/nginx test was rejected immediately.
+- Audit: Detects existing non-compliant Pods — this 15-day-old application Pod was flagged.
+Gatekeeper doesn't automatically delete or modify the existing Pod when Audit finds a violation.
+
+
+
+
+We'll test dry-run enforcement. In Gatekeeper, dryrun reports violations but doesn't reject matching resources.
+
+First, open your constraint:
+nano ~/learn/gatekeeper/constraint.yaml
+
+
+
+
+Add it under spec, before match, like this:
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRegistries
+metadata:
+  name: allowed-registries
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["dev"]
+  parameters:
+    allowedRegistries:
+      - "docker.io/"
+      - "registry.k8s.io/"
+
+
+Only one line was added: enforcementAction: dryrun
+
+
+
+
+
+Now apply the updated Constraint:
+kubectl apply -f ~/learn/gatekeeper/constraint.yaml
+
+
+
+
+Now let's test the difference between deny and dryrun.
+
+Try creating a Pod with an unapproved registry:
+kubectl run gatekeeper-dryrun-test --image=quay.io/nginx --restart=Never -n dev
+
+
+
+
+Expected: Unlike deny, dryrun should allow the Pod creation while Gatekeeper reports the violation.
+
+
+
+
+Now check whether Gatekeeper recorded the violation:
+kubectl get k8sallowedregistries allowed-registries -o yaml
+
+
+Look at status.violations and the enforcementAction value.
+
+
+
+Now restore the Constraint to deny mode.
+
+Open the file:
+nano ~/learn/gatekeeper/constraint.yaml
+
+
+Change:
+enforcementAction: dryrun
+
+
+back to:
+enforcementAction: deny
+
+
+Save and exit.
+
+
+
+
+Good. We've verified both Gatekeeper enforcement modes:
+- deny — blocks non-compliant Pod creation.
+- dryrun — permits creation but reports violations.
+We also verified Audit detects existing non-compliant Pods.
+
+
+
+Next Gatekeeper topic: Policy exemptions. We'll learn how to deliberately exempt specific namespaces or resources from a Gatekeeper constraint without disabling the policy globally.
+
+
+
+
+First, create a dedicated test namespace:
+kubectl create namespace gatekeeper-exempt
+
+
+
+
+
+Now edit constraint.yaml to add the namespace exclusion.
+nano ~/learn/gatekeeper/constraint.yaml
+
+
+Under spec.match, add:
+excludedNamespaces:
+  - gatekeeper-exempt
+
+
+Keep namespaces: ["dev"] unchanged. Save and exit.
+
+
+
+
+
+Now apply the updated constraint:
+kubectl apply -f ~/learn/gatekeeper/constraint.yaml
+
+
+Let's test whether the exemption works with a Pod using a disallowed registry in the exempt namespace:
+kubectl run gatekeeper-exemption-test --image=quay.io/nginx --restart=Never -n gatekeeper-exempt
 
 
 
@@ -24401,8 +24531,13 @@ Argument										Meaning
 
 
 
-
-
+We already demonstrated the core Gatekeeper skills:
+- Rego and ConstraintTemplates
+- Constraints and parameters
+- Admission enforcement (deny)
+- dryrun
+- Audit of existing resources
+- Namespace exemptions
 
 
 
