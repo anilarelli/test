@@ -24926,6 +24926,178 @@ At this point, you've created a permission policy. It grants nothing to anyone u
 
 
 
+Step 6 — Create a test IAM user
+Now we'll create a test identity to which we'll attach the policy we just created.
+
+This is a lab identity, not an account administrator.
+1. Open IAM Users
+In the IAM Console:
+1. Select Users.
+2. Click Create user.
+2. Configure the user
+Enter:
+
+- User name: devsecops-lab-user
+
+If the console offers a console-access option, we'll configure it for this lab so we can test permissions through the AWS Console.
+3. Enable console access
+If prompted:
+- Select Provide user access to the AWS Management Console.
+- Choose the appropriate password option available in the console.
+- For this lab, use a strong, unique password.
+- Don't reuse your personal or other account passwords.
+4. Permissions
+Choose Attach policies directly.
+
+Search for:
+
+DevSecOpsLab-S3-ReadSpecificBucket
+
+Select the policy you created.
+
+
+
+5. Review and create
+Review the user configuration and create the user.
+
+
+
+
+
+
+
+Step 7 — Create an S3 lab bucket
+Now we'll create a bucket so we can test the IAM policy against a real AWS resource.
+
+We'll use a private bucket. Do not disable Block Public Access.
+1. Open S3
+Open Amazon S3 Console1. Select Create bucket.
+2. Choose the AWS Region you want to use for the lab. We'll keep the lab in one region for simplicity.
+2. Choose a bucket name
+S3 bucket names must be globally unique across the AWS partition.
+
+Use a name like:
+devsecops-iam-lab-unique-12345
+
+
+Replace the example suffix with a random combination of digits so your bucket name is unique.
+3. Configure bucket security
+Keep these settings:
+- Block all public access: Enabled
+- Bucket Versioning: Disabled for this simple lab (optional)
+- Encryption: Keep the default encryption enabled.
+- Object Ownership: Bucket owner enforced (ACLs disabled), if shown.
+Then click Create bucket.
+
+4. Important — Update our IAM policy to match the actual bucket
+Our original policy uses the placeholder bucket name devsecops-lab-bucket. Your actual bucket will have a different name.
+
+We must update the policy before testing.
+
+Go to:
+
+IAM → Policies → DevSecOpsLab-S3-ReadSpecificBucket → Edit → JSON
+
+Replace the resource with your exact bucket name:
+"Resource": "arn:aws:s3:::YOUR-ACTUAL-BUCKET-NAME/*"
+
+
+For example, if your bucket is:
+
+devsecops-iam-lab-unique-12345
+
+then the resource must be:
+"Resource": "arn:aws:s3:::devsecops-iam-lab-unique-12345/*"
+
+
+Save the policy changes.
+
+Do not use the example bucket name unless that is the actual bucket you created.
+
+This is an important real-world lesson: IAM policies must reference the correct resource ARN. A perfectly valid policy can still fail if the ARN doesn't match the resource.
+
+
+
+
+
+
+
+Step 8 — Upload a test object
+Now we'll create an object inside the bucket that our test IAM user should be permitted to read.
+1. Open your S3 bucket
+1. Go to the S3 Console.
+2. Open the bucket you created.
+3. Click Upload.
+2. Create a test file on your Ubuntu machine
+Open a terminal and run:
+echo "This is an IAM permission testing file." > iam-test.txt
+
+
+What this command does
+- echo — prints text to standard output.
+- "This is an IAM permission testing file." — the text we want.
+- > — redirects output into a file.
+- iam-test.txt — the file created in your current directory.
+This command creates a small file locally. It doesn't interact with AWS.
+3. Upload the file
+1. Click Add files in the S3 upload page.
+2. Select iam-test.txt from your Ubuntu environment.
+3. Keep the default upload settings.
+4. Click Upload.
+You should now see iam-test.txt listed inside your bucket.
+
+
+
+
+
+
+
+Step 9 — Test IAM permissions
+This is the most important part of the lab: testing the permission instead of merely looking at the policy.
+
+We created an IAM user with a policy allowing s3:GetObject for objects in one bucket.
+
+Now we'll verify what that user can and cannot do.
+1. Sign in as the test IAM user
+We need to use the credentials for devsecops-lab-user, not your root user.
+1. Open a private/incognito browser window.
+2. Open the AWS IAM sign-in page.
+3. Use your AWS account ID or account alias, IAM username and the password you configured for the test user.
+4. Sign in.
+If you don't know the account sign-in URL, you can obtain it from IAM's user details or the AWS sign-in page.
+2. Test what the user can access
+1. Open the S3 Console while logged in as devsecops-lab-user.
+2. Try opening the S3 service.
+3. Try navigating to your lab bucket.
+You may receive Access Denied. That is expected.
+
+Our policy allows:
+
+- s3:GetObject — Allowed by our policy
+
+Our policy does not grant:
+- s3:ListBucket
+- s3:ListAllMyBuckets
+- s3:PutObject
+- s3:DeleteObject
+The S3 console often needs listing permissions to display buckets and their contents. So a console error doesn't necessarily mean our GetObject permission is broken.
+
+
+Your IAM user is being denied the ability to list buckets because our policy grants only s3:GetObject on objects within the specific bucket. It does not grant s3:ListAllMyBuckets.
+
+The console is trying to perform a bucket-listing operation, and AWS is denying that operation.
+Why AWS is showing this error
+
+
+There are three different S3 permissions involved here:
+Permission						Purpose										Our policy
+s3:ListAllMyBuckets				Lists all buckets in the account			Not allowed
+s3:ListBucket					Lists objects within a specific bucket		Not allowed
+s3:GetObject					Reads/downloads a specific object			Allowed by our policy
+
+We haven't yet successfully tested the GetObject permission. The console error only confirms that the bucket-listing request is denied.
+Why this is valuable in security
+A user can have permission to read a particular object without having permission to browse or list buckets. Permissions are evaluated for the specific API request, not simply for the entire S3 service.
 
 
 
@@ -24934,19 +25106,71 @@ At this point, you've created a permission policy. It grants nothing to anyone u
 
 
 
+Let's update the policy temporarily so the IAM test user can navigate the S3 console and test the permissions we designed.
+Step 1 — Update the IAM policy
+Open:
+
+AWS Console → IAM → Policies → DevSecOpsLab-S3-ReadSpecificBucket → Edit
+
+Replace the existing policy with the following. Replace ACTUAL_BUCKET_NAME in both locations with your real S3 bucket name.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListBucketNamesForConsole",
+      "Effect": "Allow",
+      "Action": "s3:ListAllMyBuckets",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ListObjectsInLabBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::ACTUAL_BUCKET_NAME"
+    },
+    {
+      "Sid": "ReadObjectsInLabBucket",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::ACTUAL_BUCKET_NAME/*"
+    }
+  ]
+}
+
+
+Why are we adding these three permissions?
+Permission					Resource							Purpose
+s3:ListAllMyBuckets				*								Allows the user to see bucket names in the account
+s3:ListBucket				Specific bucket ARN					Allows listing objects inside our lab bucket
+s3:GetObject				Specific bucket's object ARN		Allows reading/downloading objects from our lab bucket
+
+Security distinction
+
+s3:ListAllMyBuckets lets the user discover bucket names, but it does not grant access to the contents of those buckets. The other two permissions remain restricted to our lab bucket.
 
 
 
 
 
 
+Step 2 — Test the permissions
+After saving the policy, sign in as devsecops-lab-user.
 
+Try these three tests:
+Test 1
+List the buckets
 
+Expected: Allowed
 
+Test 2
+Open your lab bucket and download iam-test.txt
 
+Expected: Allowed
 
+Test 3
+Attempt to upload a separate test file
 
-
+Expected: Denied (Access Denied)
 
 
 
