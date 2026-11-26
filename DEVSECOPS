@@ -24527,10 +24527,6 @@ kubectl run gatekeeper-exemption-test --image=quay.io/nginx --restart=Never -n g
 
 
 
-
-
-
-
 We already demonstrated the core Gatekeeper skills:
 - Rego and ConstraintTemplates
 - Constraints and parameters
@@ -24538,6 +24534,137 @@ We already demonstrated the core Gatekeeper skills:
 - dryrun
 - Audit of existing resources
 - Namespace exemptions
+
+
+
+
+
+
+
+Stage 10 — Cloud Security
+
+
+
+Lesson 10.1: AWS IAM (Identity and Access Management)
+
+
+
+
+
+IAM is the system AWS uses to determine:
+- Who is accessing AWS?
+- What are they allowed to do?
+- Which resources can they access?
+- Under what conditions can they access them?
+
+
+
+
+3. The five core IAM components
+These are the components we need to understand before touching IAM policies.
+
+The 5 core IAM components we covered:
+1. IAM Users – Individual identities within an AWS account.
+2. IAM Groups – Collections of IAM users used to manage permissions collectively.
+3. IAM Roles – Identities that provide temporary credentials to authorized principals.
+4. IAM Policies – JSON documents defining permissions (Allow/Deny).
+5. IAM Permissions – The actions and resources an identity is allowed or denied access to.
+
+
+
+
+3.1 IAM Users
+An IAM user represents an identity within an AWS account.
+
+Historically, organizations created IAM users for individual employees and provided them with:
+- Username
+- Password for console access
+- Access keys for programmatic access (when needed)
+
+
+
+
+3.2 IAM Groups
+An IAM group is a collection of IAM users.
+
+Imagine:
+- Developer1
+- Developer2
+- Developer3
+Rather than attaching the same policy individually to each user, you can put them into a group called Developers.
+
+
+
+
+Why are groups useful?
+Suppose 50 developers join an organization.
+
+Without groups:
+- Attach permissions to each individual.
+- Manage permissions separately.
+- Remove permissions individually.
+With groups:
+- Add users to the appropriate group.
+- Attach permissions to the group.
+- Manage common permissions centrally.
+Important: IAM groups are for IAM users. IAM roles are not members of IAM groups.
+
+
+
+
+3.3 IAM Roles
+IAM roles are one of the most important concepts in cloud security.
+
+An IAM role is an identity with permissions that can be assumed by an authorized principal.
+
+Unlike the typical IAM user credential model, a role is designed to provide temporary credentials when it is assumed.
+
+
+
+
+3.4 IAM Policies
+Policies define permissions.
+
+A policy is a document that AWS evaluates to determine whether a request should be permitted or denied.
+
+Policies commonly use JSON.
+
+Let's examine one.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::devsecops-lab-bucket/*"
+    }
+  ]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
