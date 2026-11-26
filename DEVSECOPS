@@ -24644,6 +24644,229 @@ Let's examine one.
 
 
 
+Stage 10.1 — AWS IAM
+Lesson 2: IAM Policies — Deep Dive
+
+Understand the anatomy of an IAM policy
+Let's examine this policy:
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadLabBucket",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::devsecops-lab-bucket/*"
+    }
+  ]
+}
+
+
+This policy allows retrieving objects from a specific S3 bucket.
+Breakdown
+Element	Meaning
+Version	Policy language version
+Statement	Permission statement(s)
+Sid	Optional statement identifier
+Effect	Allow or Deny
+Action	AWS API action(s)
+Resource	Resource(s) to which the permission applies
+Condition	Optional rules governing when a permission applies
+
+Sid — Statement ID
+"Sid": "ReadLabBucket"
+
+
+This is an optional identifier used to make statements easier to recognize.
+
+It doesn't grant permissions itself.
+Effect
+"Effect": "Allow"
+
+
+This statement grants the specified permission, subject to the rest of AWS authorization evaluation.
+
+If we change it to:
+"Effect": "Deny"
+
+
+the statement explicitly denies the specified request when it applies.
+Action
+"Action": "s3:GetObject"
+
+
+This represents the API operation.
+
+For example, s3:GetObject is not the same as s3:PutObject.
+Action	What it does
+s3:GetObject	Retrieves an object
+s3:PutObject	Writes an object
+s3:DeleteObject	Deletes an object
+s3:ListBucket	Lists objects in a bucket
+
+These permissions are not interchangeable.
+
+For example, a policy granting s3:GetObject doesn't automatically grant the ability to upload or delete objects.
+Resource
+"Resource": "arn:aws:s3:::devsecops-lab-bucket/*"
+
+
+This defines where the permission applies.
+
+Let's dissect the ARN.
+arn:aws:s3:::devsecops-lab-bucket/*
+
+
+Part	Meaning
+arn	Amazon Resource Name
+aws	AWS partition
+s3	Service
+Empty region	S3 bucket ARN doesn't specify a region here
+Empty account ID	S3 bucket ARN doesn't specify an account ID here
+devsecops-lab-bucket/*	All objects inside the named bucket
+
+The * at the end matches object keys within the bucket.
+
+It does not grant access to every S3 bucket.
+
+3. ARN — Amazon Resource Name
+An ARN is a standard identifier used to identify AWS resources.
+
+General format:
+arn:partition:service:region:account-id:resource
+
+
+Example:
+arn:aws:ec2:ap-south-1:123456789012:instance/i-1234567890abcdef0
+
+
+Component	Value
+arn	ARN identifier
+aws	AWS partition
+ec2	EC2 service
+ap-south-1	Mumbai region
+123456789012	Example AWS account ID
+instance/i-1234567890abcdef0	Specific EC2 instance
+
+Not every ARN contains every field.
+
+Some services, such as S3, have resource ARNs without region or account ID components.
+Why ARNs matter in security
+Imagine an IAM policy grants:
+"Resource": "*"
+
+
+Depending on the action, this can allow access across a very broad set of resources.
+
+
+
+Compare:
+More restrictive
+"Resource": "arn:aws:s3:::company-backups/*"
+
+
+Limited to objects in the specified bucket.
+Potentially broad
+"Resource": "*"
+
+
+The scope depends on the action and applicable policy evaluation.
+
+This is one of the first things we look at when auditing IAM.
+
+
+
+
+4. IAM Conditions
+Conditions allow permissions to be restricted based on specific criteria.
+
+Instead of saying:
+This identity can perform an action.
+
+You can say:
+This identity can perform the action only when certain conditions are satisfied.
+
+Example:
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::devsecops-lab-bucket/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "203.0.113.10/32"
+        }
+      }
+    }
+  ]
+}
+
+
+This statement restricts the permission to requests originating from the specified IPv4 address.
+What is Condition?
+"Condition": {}
+
+
+Conditions are additional authorization criteria.
+
+Examples of what conditions can restrict:
+- Source IP address
+- AWS region
+- Time-related criteria
+- Resource tags
+- MFA-related context
+- Principal attributes
+- Specific request attributes
+Understanding the example
+"IpAddress": {
+  "aws:SourceIp": "203.0.113.10/32"
+}
+
+
+Component	Explanation
+IpAddress	Condition operator
+aws:SourceIp	AWS condition key for the request's source IP
+203.0.113.10/32	A single IPv4 address
+
+This is an illustrative policy, not a policy to deploy blindly. IP-based restrictions can cause legitimate requests to fail and aren't a replacement for other security controls.
+
+
+
+
+
+
+5. Identity-based vs resource-based policies
+This is an important distinction.
+Identity-based policy
+Attached to an identity, such as:
+- IAM user
+- IAM group
+- IAM role
+It defines what that identity can do.
+IAM Identity
+
+
+Identity-based policy
+
+Permissions are associated with the identity.
+Resource-based policy
+Attached directly to a resource or provided through the resource's policy mechanism.
+
+Examples include:
+- S3 bucket policies
+- KMS key policies
+- Lambda resource policies
+
+
+
+
+
+
+
+
+
 
 
 
