@@ -24835,8 +24835,6 @@ This is an illustrative policy, not a policy to deploy blindly. IP-based restric
 
 
 
-
-
 5. Identity-based vs resource-based policies
 This is an important distinction.
 Identity-based policy
@@ -24865,7 +24863,64 @@ Examples include:
 
 
 
+Stage 10.1 — IAM Practical Lab 1
+Create and test a least-privilege IAM policy
+Goal: Create a policy that permits reading objects from one specific S3 bucket, while not granting other S3 operations.
 
+We'll test how AWS authorization behaves instead of just creating a policy and assuming it works.
+
+
+Step 1 — Open IAM
+1. Open the AWS Console: AWS IAM Console.
+2. In the left navigation, select Policies.
+3. Click Create policy.
+
+
+
+Step 2 — Create our policy
+Select the JSON tab in the policy editor.
+
+Remove the existing content and paste this policy:
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlySpecificBucket",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::devsecops-lab-bucket/*"
+    }
+  ]
+}
+
+
+What we're creating
+Field	Value	Purpose
+Sid	ReadOnlySpecificBucket	Identifies the statement
+Effect	Allow	Grants permission
+Action	s3:GetObject	Allows object retrieval
+Resource	arn:aws:s3:::devsecops-lab-bucket/*	Restricts permission to matching objects in this bucket
+
+This policy does not grant bucket listing, uploading, deleting, or access to other buckets.
+
+The bucket name is a placeholder for our lab. We're not creating a bucket yet.
+
+Step 3 — Validate the policy
+1. Click Next.
+2. Review the policy.
+3. If AWS reports no policy syntax errors, continue.
+Step 4 — Name the policy
+Use:
+DevSecOpsLab-S3-ReadSpecificBucket
+
+
+Description:
+Allows reading objects from one designated S3 lab bucket only.
+
+
+Click Create policy.
+
+At this point, you've created a permission policy. It grants nothing to anyone until it is applied to an identity and the applicable authorization rules allow the request.
 
 
 
